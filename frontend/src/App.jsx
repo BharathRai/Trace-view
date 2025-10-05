@@ -22,6 +22,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+// frontend/src/App.jsx
+
   useEffect(() => {
     async function loadPyodide() {
       try {
@@ -31,7 +33,8 @@ function App() {
         });
         console.log("Pyodide loaded successfully.");
         
-        const tracerCode = await (await fetch('/src/python/tracer.py')).text();
+        // Use the new, simpler path to the tracer file
+        const tracerCode = await (await fetch('/tracer.py')).text();
         pyodideInstance.FS.writeFile("tracer.py", tracerCode, { encoding: "utf8" });
 
         setPyodide(pyodideInstance);
