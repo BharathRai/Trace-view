@@ -1,0 +1,7 @@
+# backend/requirements.txt
+fastapi
+uvicorn
+google-generativeai
+python-dotenv
+graphviz
+gunicorn
