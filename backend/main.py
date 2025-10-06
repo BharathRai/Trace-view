@@ -14,7 +14,12 @@ load_dotenv()
 app = FastAPI()
 
 # CORS Middleware (no changes here)
-origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+origins = [
+    "http://localhost:5173", 
+    "http://127.0.0.1:5173",
+    "https://trace-view.onrender.com"  # Add this line
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
