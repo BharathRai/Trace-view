@@ -4,48 +4,52 @@ import 'reactflow/dist/style.css';
 import ReactMarkdown from 'react-markdown';
 import dagre from 'dagre';
 
-// --- Helper Components ---
+// --- NEW FrameNode ---
+// This component now uses our new CSS classes for a grid layout
 const FrameNode = ({ data }) => {
     const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
+    
     return (
-        <div style={{ background: '#2a2a2a', border: data.isExecuting ? '2px solid #34d399' : '1px solid #777', boxShadow: data.isExecuting ? '0 0 10px #34d399' : 'none', borderRadius: '5px', color: '#eee' }}>
-            <div style={{ padding: '5px 10px', borderBottom: '1px solid #555', backgroundColor: '#333' }}>
-                <strong>{data.title}</strong>
+        <div 
+            className="frame-node" 
+            style={{ 
+                border: data.isExecuting ? '2px solid #34d399' : '1px solid #777', 
+                boxShadow: data.isExecuting ? '0 0 10px #34d399' : 'none' 
+            }}
+        >
+            <div className="frame-title">{data.title}</div>
+            <div className="var-grid">
+                {data.variables.filter(v => !IGNORED_VARS.includes(v.name)).map(v => (
+                    // Use React.Fragment to group the two grid cells for each variable
+                    <React.Fragment key={v.name}>
+                        <div className="var-box var-name">{v.name}</div>
+                        <div className="var-box var-value">
+                            <span>{v.value}</span>
+                            {v.hasRef && (
+                                <Handle
+                                    type="source"
+                                    position={Position.Right}
+                                    id={v.handleId}
+                                    style={{ background: '#00BFFF', width: 10, height: 10, right: -6 }}
+                                />
+                            )}
+                        </div>
+                    </React.Fragment>
+                ))}
             </div>
-            <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                <tbody>
-                    {data.variables.filter(v => !IGNORED_VARS.includes(v.name)).map(v => (
-                        <tr key={v.name} style={{ borderTop: '1px solid #444' }}>
-                            <td style={{ padding: '4px 8px', width: '40%' }}>{v.name}</td>
-                            <td style={{ padding: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span>{v.value}</span>
-                                
-                                {v.hasRef && (
-                                    <Handle
-                                        type="source"
-                                        position={Position.Right}
-                                        id={v.handleId} // This ID must match the edge's sourceHandle
-                                        style={{ background: '#00BFFF', width: 10, height: 10 }}
-                                    />
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
         </div>
     );
 };
 
+// --- NEW HeapNode ---
+// This component also uses our new CSS classes
 const HeapNode = ({ data }) => (
-    <div style={{ background: '#333', border: '1px solid #777', borderRadius: '5px', color: '#eee' }}>
-        <div style={{ padding: '2px 5px', borderBottom: '1px solid #555', backgroundColor: '#444', color: '#aaa', fontSize: '0.8em' }}>
-            {data.type}
-        </div>
-        <div style={{ display: 'flex', padding: '5px' }}>
+    <div className="heap-node">
+        <div className="heap-title">{data.type}</div>
+        <div className="heap-grid">
             {data.items.map((item, index) => (
-                <div key={index} style={{ border: '1px solid #666', padding: '5px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.7em', color: '#999' }}>{index}</div>
+                <div key={index} className="heap-item">
+                    <div className="heap-item-index">{index}</div>
                     <div>{item.value}</div>
                 </div>
             ))}
@@ -55,13 +59,13 @@ const HeapNode = ({ data }) => (
 
 const nodeTypes = { frame: FrameNode, heap: HeapNode };
 
-// --- Dagre Layout Function ---
+// --- Dagre Layout Function (No changes) ---
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
-const nodeWidth = 300;
-const nodeHeight = 200;
+const nodeWidth = 250; // We can make nodes a bit narrower now
+const nodeHeight = 150; // and shorter
 const getLayoutedElements = (nodes, edges, direction = 'LR') => {
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 20, ranksep: 70 });
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 20, ranksep: 50 });
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
@@ -79,66 +83,50 @@ const getLayoutedElements = (nodes, edges, direction = 'LR') => {
   return { nodes, edges };
 };
 
-// --- Main Data Processing Function ---
+// --- Main Data Processing Function (No changes) ---
 const generateFlowElements = (traceStep) => {
     if (!traceStep || !traceStep.stack) return { nodes: [], edges: [] };
-
     let nodes = [];
     let edges = [];
     const { stack, heap, line_number } = traceStep;
 
-    // Process HEAP objects
     Object.entries(heap).forEach(([id, obj], index) => {
         const isList = obj.type === 'list' || obj.type === 'tuple';
         let items = isList ? obj.value.map(v => ({ value: v.value ?? '→' })) : [];
-        nodes.push({ 
-            id: `heap-${id}`, 
-            type: 'heap', 
-            data: { type: obj.type, items: items }
-        });
+        nodes.push({ id: `heap-${id}`, type: 'heap', data: { type: obj.type, items: items } });
     });
 
-    // Process STACK frames
     stack.forEach((frame, frameIndex) => {
         const frameId = `frame-${frameIndex}`;
         const variables = Object.entries(frame.locals).map(([name, data]) => ({
             name: name,
             value: data.value ?? '→',
             hasRef: !!data.ref,
-            handleId: `handle-${frameId}-${name}` // Create a unique handle ID
+            handleId: `handle-${frameId}-${name}`
         }));
-
         nodes.push({
-            id: frameId,
-            type: 'frame',
+            id: frameId, type: 'frame',
             data: {
                 title: frame.func_name === '<module>' ? 'Global Frame' : frame.func_name,
                 variables: variables,
-                isExecuting: frame.lineno === line_number && frame.func_name !== '<module>'
+                isExecuting: frame.linno === line_number && frame.func_name !== '<module>'
             }
         });
-
-        // Create edges with the correct sourceHandle
         Object.entries(frame.locals).forEach(([name, data]) => {
             if (data.ref) {
-                const handleId = `handle-${frameId}-${name}`; // Must match the one above
+                const handleId = `handle-${frameId}-${name}`;
                 edges.push({
-                    id: `edge-${frameId}-${name}`,
-                    source: frameId,
-                    sourceHandle: handleId,
-                    target: `heap-${data.ref}`,
-                    type: 'smoothstep',
-                    markerEnd: { type: 'arrowclosed' },
-                    style: { stroke: '#00BFFF' }
+                    id: `edge-${frameId}-${name}`, source: frameId, sourceHandle: handleId,
+                    target: `heap-${data.ref}`, type: 'smoothstep',
+                    markerEnd: { type: 'arrowclosed' }, style: { stroke: '#00BFFF' }
                 });
             }
         });
     });
-
     return getLayoutedElements(nodes, edges);
 };
 
-// --- Main Visualization Component ---
+// --- Main Visualization Component (No changes) ---
 function Visualization({ traceStep, error }) {
     const [elements, setElements] = useState({ nodes: [], edges: [] });
 

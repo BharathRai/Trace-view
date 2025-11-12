@@ -145,3 +145,85 @@ body {
 .variable-flash {
   animation: flash 1s ease-out;
 }
+
+/* --- New Node Styling --- */
+
+/* The main container for a frame node */
+.frame-node {
+    background: #2a2a2a;
+    border: 1px solid #777;
+    border-radius: 8px;
+    color: #eee;
+    overflow: hidden; /* Ensures the child elements fit */
+    font-family: 'Courier New', Courier, monospace;
+}
+
+/* The title bar of the frame (e.g., "Global Frame" or "factorial") */
+.frame-title {
+    padding: 5px 10px;
+    border-bottom: 1px solid #555;
+    background-color: #333;
+    font-weight: bold;
+}
+
+/* The grid container for all the variables */
+.var-grid {
+    display: grid;
+    /* This creates our 2-column layout: [name] [value] */
+    grid-template-columns: 40% 60%;
+    width: 100%;
+}
+
+/* A single box in the grid (for both name and value) */
+.var-box {
+    padding: 4px 8px;
+    border-top: 1px solid #444;
+}
+
+/* Specific style for variable names */
+.var-name {
+    color: #c084fc; /* Purple */
+    font-weight: bold;
+    border-right: 1px solid #444;
+}
+
+/* Specific style for variable values */
+.var-value {
+    background-color: #222;
+    position: relative; /* Needed for the <Handle> to position correctly */
+}
+
+/* --- New Heap Node Styling --- */
+.heap-node {
+    background: #333;
+    border: 1px solid #777;
+    border-radius: 5px;
+    color: #eee;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+/* Title for heap objects (e.g., "list") */
+.heap-title {
+    padding: 2px 5px;
+    border-bottom: 1px solid #555;
+    background-color: #444;
+    color: #aaa;
+    font-size: 0.8em;
+}
+
+/* Grid for list/tuple items */
+.heap-grid {
+    display: flex;
+    padding: 5px;
+}
+
+/* A single item (index + value) in the heap */
+.heap-item {
+    border: 1px solid #666;
+    padding: 5px;
+    text-align: center;
+}
+.heap-item-index {
+    font-size: 0.7em;
+    color: #999;
+}
