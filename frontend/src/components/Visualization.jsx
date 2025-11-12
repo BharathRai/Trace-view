@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'; // <-- ADD 'React' HERE
-import ReactFlow, { MiniMap, Controls, Background, Handle, Position } from 'reactflow';
+import React, { useState, useEffect } from 'react';
+// 1. Add 'MarkerType' to this import line
+import ReactFlow, { MiniMap, Controls, Background, Handle, Position, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import ReactMarkdown from 'react-markdown';
 import dagre from 'dagre';
 
-// --- Helper Components ---
+// --- Helper Components (FrameNode, HeapNode) ---
 const FrameNode = ({ data }) => {
     const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
     
@@ -19,7 +20,7 @@ const FrameNode = ({ data }) => {
             <div className="frame-title">{data.title}</div>
             <div className="var-grid">
                 {data.variables.filter(v => !IGNORED_VARS.includes(v.name)).map(v => (
-                    <React.Fragment key={v.name}> {/* This line needs 'React' to be defined */}
+                    <React.Fragment key={v.name}>
                         <div className="var-box var-name">{v.name}</div>
                         <div className="var-box var-value">
                             <span>{v.value}</span>
@@ -54,7 +55,7 @@ const HeapNode = ({ data }) => (
 const nodeTypes = { frame: FrameNode, heap: HeapNode };
 
 
-// --- Dagre Layout Function (No changes) ---
+// --- Dagre Layout Function ---
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 250;
@@ -111,7 +112,7 @@ const generateFlowElements = (traceStep) => {
                     id: `edge-${frameId}-${name}`, source: frameId, sourceHandle: handleId,
                     target: `heap-${data.ref}`, type: 'smoothstep',
                     
-                    // --- 2. Make pointers animated and styled ---
+                    // 2. This line (which was causing the error) will now work
                     animated: true,
                     style: { stroke: '#00BFFF' },
                     markerEnd: { type: MarkerType.ArrowClosed, color: '#00BFFF' }
@@ -136,7 +137,6 @@ function Visualization({ traceStep, error }) {
     }, [traceStep, error]);
 
     if (error) {
-        // ... (Error display remains the same)
         return (
             <div className="error-container">
                 <h2 className="error-title">🚨 An Error Occurred!</h2>
@@ -151,7 +151,6 @@ function Visualization({ traceStep, error }) {
     }
 
     if (traceStep && traceStep.event === 'output') {
-        // ... (Output display remains the same)
         return (
             <div className="viz-section">
                 <h2>Program Output</h2>
@@ -169,14 +168,12 @@ function Visualization({ traceStep, error }) {
                 edges={elements.edges} 
                 nodeTypes={nodeTypes} 
                 fitView
-                // --- 3. Polish the interaction ---
-                nodesDraggable={false} // Nodes are locked in place
+                nodesDraggable={false}
                 panOnDrag={true}
                 zoomOnScroll={true}
             >
-                {/* --- 4. Style the MiniMap and Controls --- */}
                 <MiniMap 
-                    nodeColor="#34d399" // Use the same green as the highlight
+                    nodeColor="#34d399"
                     maskColor="#111827"
                     style={{ backgroundColor: '#1f2937' }}
                 />
@@ -188,10 +185,10 @@ function Visualization({ traceStep, error }) {
                     }} 
                 />
                 <Background 
-                    variant="lines" // Change from 'dots' to 'lines'
-                    gap={20}        // Space between lines
-                    size={1}        // Thickness of lines
-                    color="#444"   // Color of the lines
+                    variant="lines"
+                    gap={20}
+                    size={1}
+                    color="#444"
                 />
             </ReactFlow>
         </div>
