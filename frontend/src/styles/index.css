@@ -227,3 +227,45 @@ body {
     font-size: 0.7em;
     color: #999;
 }
+
+/* New In-line Frame Node Styles */
+.inline-frame-node {
+  position: absolute;
+  background: #1e1e1e;
+  border: 1px solid #555;
+  border-radius: 8px;
+  color: #eee;
+  font-family: 'Courier New', Courier, monospace;
+  width: 150px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: top 0.2s ease, opacity 0.2s ease;
+  z-index: 10;
+}
+
+.inline-frame-title {
+  padding: 5px 8px;
+  border-bottom: 1px solid #555;
+  background-color: #333;
+  font-weight: bold;
+  color: #34d399; /* Green title */
+}
+
+.inline-var-grid {
+  display: grid;
+  grid-template-columns: 40% 60%;
+}
+
+.inline-var-box {
+  padding: 4px 8px;
+  font-size: 0.9em;
+}
+
+.inline-var-name {
+  color: #c084fc; /* Purple */
+  font-weight: bold;
+  border-right: 1px solid #444;
+}
+
+.inline-var-value {
+  background-color: #222;
+}
