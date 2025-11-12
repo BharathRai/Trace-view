@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-// 1. Add 'MarkerType' to this import line
 import ReactFlow, { MiniMap, Controls, Background, Handle, Position, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import ReactMarkdown from 'react-markdown';
 import dagre from 'dagre';
 
-// --- Helper Components (FrameNode, HeapNode) ---
+// --- Helper Components ---
 const FrameNode = ({ data }) => {
     const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
     
@@ -39,8 +38,17 @@ const FrameNode = ({ data }) => {
         </div>
     );
 };
+
 const HeapNode = ({ data }) => (
     <div className="heap-node">
+        {/* --- FIX #1: Add the target handle for arrows to connect to --- */}
+        <Handle
+            type="target"
+            position={Position.Left}
+            style={{ background: 'transparent', border: 'none' }}
+        />
+        {/* --- End of Fix --- */}
+
         <div className="heap-title">{data.type}</div>
         <div className="heap-grid">
             {data.items.map((item, index) => (
@@ -52,8 +60,8 @@ const HeapNode = ({ data }) => (
         </div>
     </div>
 );
-const nodeTypes = { frame: FrameNode, heap: HeapNode };
 
+const nodeTypes = { frame: FrameNode, heap: HeapNode };
 
 // --- Dagre Layout Function ---
 const dagreGraph = new dagre.graphlib.Graph();
@@ -86,7 +94,15 @@ const generateFlowElements = (traceStep) => {
     Object.entries(heap).forEach(([id, obj], index) => {
         const isList = obj.type === 'list' || obj.type === 'tuple';
         let items = isList ? obj.value.map(v => ({ value: v.value ?? '→' })) : [];
-        nodes.push({ id: `heap-${id}`, type: 'heap', data: { type: obj.type, items: items } });
+        
+        // --- FIX #2: Remove the manual 'position' property ---
+        nodes.push({ 
+            id: `heap-${id}`, 
+            type: 'heap', 
+            data: { type: obj.type, items: items }
+            // The 'position' property is now set by Dagre
+        });
+        // --- End of Fix ---
     });
 
     stack.forEach((frame, frameIndex) => {
@@ -97,6 +113,8 @@ const generateFlowElements = (traceStep) => {
             hasRef: !!data.ref,
             handleId: `handle-${frameId}-${name}`
         }));
+        
+        // --- FIX #2: Remove the manual 'position' property ---
         nodes.push({
             id: frameId, type: 'frame',
             data: {
@@ -104,15 +122,16 @@ const generateFlowElements = (traceStep) => {
                 variables: variables,
                 isExecuting: frame.lineno === line_number && frame.func_name !== '<module>'
             }
+            // The 'position' property is now set by Dagre
         });
+        // --- End of Fix ---
+        
         Object.entries(frame.locals).forEach(([name, data]) => {
             if (data.ref) {
                 const handleId = `handle-${frameId}-${name}`;
                 edges.push({
                     id: `edge-${frameId}-${name}`, source: frameId, sourceHandle: handleId,
                     target: `heap-${data.ref}`, type: 'smoothstep',
-                    
-                    // 2. This line (which was causing the error) will now work
                     animated: true,
                     style: { stroke: '#00BFFF' },
                     markerEnd: { type: MarkerType.ArrowClosed, color: '#00BFFF' }
