@@ -135,3 +135,13 @@ body {
   .line-highlight {
       background-color: rgba(250, 204, 21, 0.2);
   }
+
+  @keyframes flash {
+  0% { background-color: rgba(255, 255, 0, 0); }
+  50% { background-color: rgba(255, 255, 0, 0.3); }
+  100% { background-color: rgba(255, 255, 0, 0); }
+}
+
+.variable-flash {
+  animation: flash 1s ease-out;
+}

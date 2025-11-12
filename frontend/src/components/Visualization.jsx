@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
-import ReactFlow, { MiniMap, Controls, Background } from 'reactflow';
+import ReactFlow, { MiniMap, Controls, Background, Handle, Position } from 'reactflow';
 import 'reactflow/dist/style.css';
 import ReactMarkdown from 'react-markdown';
+import dagre from 'dagre';
 
-// --- A cleaner FrameNode component ---
+// --- Helper Components ---
 const FrameNode = ({ data }) => {
-    // A list of variables to always ignore in the display
     const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
-
     return (
         <div style={{ background: '#2a2a2a', border: data.isExecuting ? '2px solid #34d399' : '1px solid #777', boxShadow: data.isExecuting ? '0 0 10px #34d399' : 'none', borderRadius: '5px', color: '#eee' }}>
             <div style={{ padding: '5px 10px', borderBottom: '1px solid #555', backgroundColor: '#333' }}>
@@ -20,7 +19,15 @@ const FrameNode = ({ data }) => {
                             <td style={{ padding: '4px 8px', width: '40%' }}>{v.name}</td>
                             <td style={{ padding: '4px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span>{v.value}</span>
-                                {v.hasRef && <div style={{ width: 10, height: 10, background: 'cyan', borderRadius: '50%', border: '1px solid #222' }} />}
+                                
+                                {v.hasRef && (
+                                    <Handle
+                                        type="source"
+                                        position={Position.Right}
+                                        id={v.handleId} // This ID must match the edge's sourceHandle
+                                        style={{ background: '#00BFFF', width: 10, height: 10 }}
+                                    />
+                                )}
                             </td>
                         </tr>
                     ))}
@@ -30,8 +37,6 @@ const FrameNode = ({ data }) => {
     );
 };
 
-
-// --- A cleaner HeapNode component ---
 const HeapNode = ({ data }) => (
     <div style={{ background: '#333', border: '1px solid #777', borderRadius: '5px', color: '#eee' }}>
         <div style={{ padding: '2px 5px', borderBottom: '1px solid #555', backgroundColor: '#444', color: '#aaa', fontSize: '0.8em' }}>
@@ -48,10 +53,33 @@ const HeapNode = ({ data }) => (
     </div>
 );
 
-
 const nodeTypes = { frame: FrameNode, heap: HeapNode };
 
-// This function now has less to do because the data is cleaner
+// --- Dagre Layout Function ---
+const dagreGraph = new dagre.graphlib.Graph();
+dagreGraph.setDefaultEdgeLabel(() => ({}));
+const nodeWidth = 300;
+const nodeHeight = 200;
+const getLayoutedElements = (nodes, edges, direction = 'LR') => {
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 20, ranksep: 70 });
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  });
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+  dagre.layout(dagreGraph);
+  nodes.forEach((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
+    node.position = {
+      x: nodeWithPosition.x - nodeWidth / 2,
+      y: nodeWithPosition.y - nodeHeight / 2,
+    };
+  });
+  return { nodes, edges };
+};
+
+// --- Main Data Processing Function ---
 const generateFlowElements = (traceStep) => {
     if (!traceStep || !traceStep.stack) return { nodes: [], edges: [] };
 
@@ -63,9 +91,11 @@ const generateFlowElements = (traceStep) => {
     Object.entries(heap).forEach(([id, obj], index) => {
         const isList = obj.type === 'list' || obj.type === 'tuple';
         let items = isList ? obj.value.map(v => ({ value: v.value ?? '→' })) : [];
-        // Note: Dict visualization is omitted for simplicity but could be added here
-        
-        nodes.push({ id: `heap-${id}`, type: 'heap', position: { x: 500, y: 50 + index * 100 }, data: { type: obj.type, items: items } });
+        nodes.push({ 
+            id: `heap-${id}`, 
+            type: 'heap', 
+            data: { type: obj.type, items: items }
+        });
     });
 
     // Process STACK frames
@@ -75,12 +105,12 @@ const generateFlowElements = (traceStep) => {
             name: name,
             value: data.value ?? '→',
             hasRef: !!data.ref,
+            handleId: `handle-${frameId}-${name}` // Create a unique handle ID
         }));
 
         nodes.push({
             id: frameId,
             type: 'frame',
-            position: { x: frameIndex === 0 ? 50 : 250, y: 50 + (frameIndex > 0 ? (frameIndex - 1) * 200 : 0) },
             data: {
                 title: frame.func_name === '<module>' ? 'Global Frame' : frame.func_name,
                 variables: variables,
@@ -88,19 +118,27 @@ const generateFlowElements = (traceStep) => {
             }
         });
 
-        // Create edges for references
+        // Create edges with the correct sourceHandle
         Object.entries(frame.locals).forEach(([name, data]) => {
             if (data.ref) {
-                edges.push({ id: `edge-${frameId}-${name}`, source: frameId, target: `heap-${data.ref}`, type: 'smoothstep', markerEnd: { type: 'arrowclosed' } });
+                const handleId = `handle-${frameId}-${name}`; // Must match the one above
+                edges.push({
+                    id: `edge-${frameId}-${name}`,
+                    source: frameId,
+                    sourceHandle: handleId,
+                    target: `heap-${data.ref}`,
+                    type: 'smoothstep',
+                    markerEnd: { type: 'arrowclosed' },
+                    style: { stroke: '#00BFFF' }
+                });
             }
         });
     });
 
-    return { nodes, edges };
+    return getLayoutedElements(nodes, edges);
 };
 
-
-// --- The Main Visualization Component (no major changes below) ---
+// --- Main Visualization Component ---
 function Visualization({ traceStep, error }) {
     const [elements, setElements] = useState({ nodes: [], edges: [] });
 
@@ -139,7 +177,12 @@ function Visualization({ traceStep, error }) {
     
     return (
         <div style={{ height: '100%', width: '100%' }}>
-            <ReactFlow nodes={elements.nodes} edges={elements.edges} nodeTypes={nodeTypes} fitView>
+            <ReactFlow 
+                nodes={elements.nodes} 
+                edges={elements.edges} 
+                nodeTypes={nodeTypes} 
+                fitView
+            >
                 <MiniMap />
                 <Controls />
                 <Background />
