@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react';
-// 1. Import 'MarkerType' for styling the arrowheads
-import ReactFlow, { MiniMap, Controls, Background, Handle, Position, MarkerType } from 'reactflow';
+import React, { useState, useEffect } from 'react'; // <-- ADD 'React' HERE
+import ReactFlow, { MiniMap, Controls, Background, Handle, Position } from 'reactflow';
 import 'reactflow/dist/style.css';
 import ReactMarkdown from 'react-markdown';
 import dagre from 'dagre';
 
-// --- Helper Components (FrameNode, HeapNode) ---
-// (No changes needed to these components)
+// --- Helper Components ---
 const FrameNode = ({ data }) => {
     const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
     
@@ -21,7 +19,7 @@ const FrameNode = ({ data }) => {
             <div className="frame-title">{data.title}</div>
             <div className="var-grid">
                 {data.variables.filter(v => !IGNORED_VARS.includes(v.name)).map(v => (
-                    <React.Fragment key={v.name}>
+                    <React.Fragment key={v.name}> {/* This line needs 'React' to be defined */}
                         <div className="var-box var-name">{v.name}</div>
                         <div className="var-box var-value">
                             <span>{v.value}</span>
