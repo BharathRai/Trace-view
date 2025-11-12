@@ -269,3 +269,45 @@ body {
 .inline-var-value {
   background-color: #222;
 }
+
+/* --- Responsive Mobile Layout --- */
+
+/* This rule applies to any screen 768px wide or less (like phones) */
+@media (max-width: 768px) {
+    
+    /* Make the main content stack vertically */
+    .main-content {
+        flex-direction: column;
+    }
+
+    /* Make both panels take up the full width */
+    .editor-panel,
+    .visualization-panel {
+        width: 100%;
+        box-sizing: border-box; /* Ensures padding doesn't break layout */
+    }
+
+    /* Give the panels a 50/50 height split 
+      (you can adjust these percentages)
+    */
+    .editor-panel {
+        height: 50vh; /* 50% of the viewport height */
+    }
+
+    .visualization-panel {
+        height: 50vh; /* 50% of the viewport height */
+        border-left: none; /* Remove the side border */
+        border-top: 2px solid #374151; /* Add a border on top */
+    }
+
+    /* Optional: Stack the controls for a better fit */
+    .controls-container {
+        flex-direction: column;
+        align-items: stretch; /* Make buttons full-width */
+    }
+
+    .step-info {
+        margin-left: 0;
+        text-align: center;
+    }
+}
