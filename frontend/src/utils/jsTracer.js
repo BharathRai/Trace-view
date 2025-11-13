@@ -1,21 +1,17 @@
-// NOTE: Do NOT import runJsCode here. It is defined below.
-
 export function runJsCode(code) {
   const trace = [];
   let stepCount = 0;
-  const MAX_STEPS = 2000;
+  const MAX_STEPS = 5000;
 
   const initFunc = (interpreter, globalObject) => {
     const logWrapper = (text) => {
-      // Capture the current state *before* outputting, or use the last state
       const lastSnap = trace.length > 0 ? trace[trace.length - 1] : { stack: [], heap: {}, line_number: 0 };
-      
       trace.push({
         event: 'output',
         data: text + '\n',
-        stack: lastSnap.stack, // Persist stack so visualization doesn't disappear
+        stack: lastSnap.stack,
         heap: lastSnap.heap,
-        line_number: lastSnap.line_number 
+        line_number: lastSnap.line_number
       });
     };
 
@@ -26,7 +22,6 @@ export function runJsCode(code) {
   };
 
   try {
-    // Ensure window.Interpreter exists (loaded via index.html)
     if (!window.Interpreter) {
         throw new Error("JS-Interpreter not loaded. Check index.html");
     }
@@ -40,7 +35,7 @@ export function runJsCode(code) {
 
       const node = myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
       
-      // Capture state only on meaningful execution nodes
+      // Capture state on meaningful nodes
       if (node.start && node.end && (
           node.type === 'VariableDeclaration' || 
           node.type === 'ExpressionStatement' || 
@@ -49,11 +44,12 @@ export function runJsCode(code) {
           node.type === 'WhileStatement' || 
           node.type === 'IfStatement' ||
           node.type === 'FunctionDeclaration' ||
-          node.type === 'CallExpression'
+          node.type === 'CallExpression' ||
+          node.type === 'UpdateExpression' ||  // Added for loops (i++)
+          node.type === 'AssignmentExpression' // Added for assignments
       )) { 
         const snapshot = captureState(myInterpreter, node);
         
-        // Deduplicate steps on the same line to reduce visualization noise
         const lastSnap = trace[trace.length - 1];
         if (!lastSnap || lastSnap.line_number !== snapshot.line_number) {
            trace.push(snapshot);
@@ -77,101 +73,97 @@ export function runJsCode(code) {
 function captureState(interpreter, node) {
   const stack = [];
   const heap = {};
-
   let stateStack = interpreter.stateStack;
   
-  // Helper to resolve function names more aggressively
-  const getFuncName = (state) => {
-      if (!state.func_) return 'Global Frame';
-      if (state.func_.name) return state.func_.name;
-      
-      // If it's a variable assignment to a function (var x = function() {...})
-      // The interpreter might store the name in the node
-      if (state.func_.node && state.func_.node.id) {
-          return state.func_.node.id.name;
-      }
-      
-      return 'anonymous';
-  };
+  // This Map tracks unique function scopes to prevent duplicate frames
+  // Key: The Scope Object, Value: The Frame Data
+  const uniqueFrames = new Map();
 
-  // Iterate through the stack
   for (let i = 0; i < stateStack.length; i++) {
     const state = stateStack[i];
     
-    // We only care about scopes
     if (state.scope) {
-      let funcName = getFuncName(state);
+      // 1. IDENTIFY THE ROOT FUNCTION SCOPE
+      // JS-Interpreter creates nested scopes for blocks. We want the scope of the function.
+      // We walk up until we hit the Global Scope or a function boundary.
+      let currentScope = state.scope;
+      let functionScope = currentScope; // This is the scope identifier for our frame
       
-      // Fix root naming
-      if (i === 0) funcName = 'Global Frame';
+      // Find the scope that actually owns this function execution
+      while (currentScope && currentScope !== interpreter.globalScope && !currentScope.object) {
+          // In JS-Interpreter, function scopes usually don't have an 'object' property (which acts like a 'with' context)
+          // We assume the top-most non-global scope in this chain is our function scope
+          // This is a simplification but works for standard function calls.
+          functionScope = currentScope; 
+          if (currentScope.parent === interpreter.globalScope) break;
+          currentScope = currentScope.parent;
+      }
+      
+      // Use global scope if we bubbled all the way up
+      if (currentScope === interpreter.globalScope) {
+          functionScope = interpreter.globalScope;
+      }
 
+      // 2. DETERMINE FUNCTION NAME
+      let funcName = 'anonymous';
+      if (functionScope === interpreter.globalScope) {
+          funcName = 'Global Frame';
+      } else if (state.func_ && state.func_.name) {
+          funcName = state.func_.name;
+      } else if (state.func_ && state.func_.node && state.func_.node.id) {
+          funcName = state.func_.node.id.name;
+      }
+
+      // 3. COLLECT VARIABLES (Walking UP the chain)
+      // We gather variables from the current block scope UP to the function scope
       const locals = {};
-      let scope = state.scope;
+      let varWalkScope = state.scope;
       
-      if (scope) {
-        // Extract variables
-        // Note: We check the entire scope chain for this frame until we hit the global scope
-        // But for simplicity and to match Python visualizer, let's just grab the immediate non-global properties
-        
-        // Actually, JS-Interpreter scopes are linked.
-        // We want to display variables relevant to THIS function scope.
-        
-        for (const key in scope.properties) {
+      while (varWalkScope) {
+        for (const key in varWalkScope.properties) {
           if (key === 'arguments' || key === 'this' || key === 'window' || key === 'console' || key === 'print') continue;
           
-          const pseudoVal = scope.properties[key];
-          const formatted = formatValue(pseudoVal, heap, interpreter);
-          locals[key] = formatted;
+          // Don't overwrite variables if a child scope already defined them (shadowing)
+          if (locals[key] === undefined) {
+              const pseudoVal = varWalkScope.properties[key];
+              locals[key] = formatValue(pseudoVal, heap, interpreter);
+          }
         }
+        if (varWalkScope === functionScope || varWalkScope === interpreter.globalScope) break;
+        varWalkScope = varWalkScope.parent;
       }
 
-      // --- FILTERING LOGIC ---
-      
-      // 1. Ignore frames with NO variables (unless it's the global frame)
-      if (Object.keys(locals).length === 0 && funcName !== 'Global Frame') {
-          continue;
-      }
-
-      // 2. Deduplicate: If this frame has the same name as the last one, 
-      //    it's likely a block scope (like a for-loop). Merge variables instead of stacking.
-      const lastFrame = stack[stack.length - 1];
-      if (lastFrame && lastFrame.func_name === funcName) {
-          // Merge locals into the existing frame
-          Object.assign(lastFrame.locals, locals);
-      } else {
-          // Otherwise, push a new frame
-          stack.push({
-            func_name: funcName,
-            lineno: node.loc ? node.loc.start.line : 0,
-            locals: locals
-          });
-      }
+      // 4. CREATE OR UPDATE FRAME
+      // We use the functionScope object as the unique key. 
+      // This merges multiple states (like 'for' loop blocks) into one Function Frame.
+      uniqueFrames.set(functionScope, {
+          func_name: funcName,
+          lineno: node.loc ? node.loc.start.line : 0,
+          locals: locals
+      });
     }
   }
-  
-  // --- FINAL CLEANUP ---
-  // If we still have an 'anonymous' frame that actually corresponds to our main code wrapper,
-  // we can rename it or merge it if it's confusing. 
-  // But the logic above should handle the worst of it.
+
+  // Convert our unique Map back to an Array for the visualizer
+  // JS Maps preserve insertion order, so this keeps the stack order correct (Global -> Main -> Func)
+  uniqueFrames.forEach(frame => stack.push(frame));
 
   return {
     line_number: node.loc ? node.loc.start.line : 0,
-    stack: stack,
+    stack: stack, 
     heap: heap
   };
 }
+
 function formatValue(pseudoVal, heap, interpreter) {
   if (pseudoVal === undefined) return { value: 'undefined' };
   if (pseudoVal === null) return { value: 'null' };
 
-  // Handle Primitives
   if (interpreter.isa(pseudoVal, interpreter.BOOLEAN)) return { value: String(pseudoVal.data) };
   if (interpreter.isa(pseudoVal, interpreter.NUMBER)) return { value: String(pseudoVal.data) };
   if (interpreter.isa(pseudoVal, interpreter.STRING)) return { value: `"${pseudoVal.data}"` };
 
-  // Handle Objects (Arrays/Dicts)
   if (interpreter.isa(pseudoVal, interpreter.OBJECT)) {
-    // Generate a unique ID for the Heap
     const id = pseudoVal.id || String(Math.random()); 
     pseudoVal.id = id; 
 
@@ -179,13 +171,13 @@ function formatValue(pseudoVal, heap, interpreter) {
     let value = []; 
     
     if (interpreter.isa(pseudoVal, interpreter.ARRAY)) {
-      type = 'list'; // Use 'list' to match Python visualizer logic
+      type = 'list'; 
       const length = pseudoVal.properties.length;
       for (let i = 0; i < length; i++) {
         value.push(formatValue(pseudoVal.properties[i], heap, interpreter));
       }
     } else {
-      type = 'dict'; // Use 'dict' for objects
+      type = 'dict'; 
       value = {}; 
       for (const key in pseudoVal.properties) {
           value[key] = formatValue(pseudoVal.properties[key], heap, interpreter);
