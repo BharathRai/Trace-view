@@ -26,6 +26,18 @@ export function runJsCode(code) {
         throw new Error("JS-Interpreter not loaded. Check index.html");
     }
 
+    // 1. Safely build the variable map. If Acorn fails, we continue without it.
+    let variableMap = { '<global>': new Set() };
+    try {
+        if (window.acorn) {
+            variableMap = buildVariableMap(code);
+        } else {
+            console.warn("Acorn not found. Variable tracking might be limited.");
+        }
+    } catch (err) {
+        console.warn("Failed to parse AST for variables:", err);
+    }
+
     const myInterpreter = new window.Interpreter(code, initFunc);
 
     while (myInterpreter.step() && stepCount < MAX_STEPS) {
@@ -35,7 +47,6 @@ export function runJsCode(code) {
 
       const node = myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
       
-      // Capture state on meaningful nodes
       if (node.start && node.end && (
           node.type === 'VariableDeclaration' || 
           node.type === 'ExpressionStatement' || 
@@ -45,10 +56,10 @@ export function runJsCode(code) {
           node.type === 'IfStatement' ||
           node.type === 'FunctionDeclaration' ||
           node.type === 'CallExpression' ||
-          node.type === 'UpdateExpression' ||  // Added for loops (i++)
-          node.type === 'AssignmentExpression' // Added for assignments
+          node.type === 'UpdateExpression' || 
+          node.type === 'AssignmentExpression'
       )) { 
-        const snapshot = captureState(myInterpreter, node);
+        const snapshot = captureState(myInterpreter, node, variableMap);
         
         const lastSnap = trace[trace.length - 1];
         if (!lastSnap || lastSnap.line_number !== snapshot.line_number) {
@@ -70,83 +81,100 @@ export function runJsCode(code) {
   return trace;
 }
 
-function captureState(interpreter, node) {
+function buildVariableMap(code) {
+    const map = { '<global>': new Set() };
+    
+    // Use Acorn to parse the code
+    const ast = window.acorn.parse(code, { ecmaVersion: 2020 });
+    
+    const visit = (node, scopeName) => {
+        if (!node) return;
+
+        if (node.type === 'FunctionDeclaration') {
+            const funcName = node.id.name;
+            map[funcName] = new Set();
+            node.params.forEach(p => map[funcName].add(p.name));
+            visit(node.body, funcName);
+            return;
+        } 
+        else if (node.type === 'VariableDeclaration') {
+            node.declarations.forEach(dec => {
+                if (dec.id.name) {
+                    map[scopeName].add(dec.id.name);
+                }
+            });
+        }
+
+        for (const key in node) {
+            if (typeof node[key] === 'object' && node[key] !== null) {
+                if (Array.isArray(node[key])) {
+                    node[key].forEach(child => visit(child, scopeName));
+                } else if (node[key].type) {
+                    visit(node[key], scopeName);
+                }
+            }
+        }
+    };
+
+    visit(ast, '<global>');
+    return map;
+}
+
+
+function captureState(interpreter, node, variableMap) {
   const stack = [];
   const heap = {};
   let stateStack = interpreter.stateStack;
   
-  // This Map tracks unique function scopes to prevent duplicate frames
-  // Key: The Scope Object, Value: The Frame Data
-  const uniqueFrames = new Map();
+  const processedScopes = new Set();
 
   for (let i = 0; i < stateStack.length; i++) {
     const state = stateStack[i];
     
-    if (state.scope) {
-      // 1. IDENTIFY THE ROOT FUNCTION SCOPE
-      // JS-Interpreter creates nested scopes for blocks. We want the scope of the function.
-      // We walk up until we hit the Global Scope or a function boundary.
-      let currentScope = state.scope;
-      let functionScope = currentScope; // This is the scope identifier for our frame
-      
-      // Find the scope that actually owns this function execution
-      while (currentScope && currentScope !== interpreter.globalScope && !currentScope.object) {
-          // In JS-Interpreter, function scopes usually don't have an 'object' property (which acts like a 'with' context)
-          // We assume the top-most non-global scope in this chain is our function scope
-          // This is a simplification but works for standard function calls.
-          functionScope = currentScope; 
-          if (currentScope.parent === interpreter.globalScope) break;
-          currentScope = currentScope.parent;
-      }
-      
-      // Use global scope if we bubbled all the way up
-      if (currentScope === interpreter.globalScope) {
-          functionScope = interpreter.globalScope;
-      }
+    if (state.scope && state.func_) {
+      if (processedScopes.has(state.scope)) continue;
+      processedScopes.add(state.scope);
 
-      // 2. DETERMINE FUNCTION NAME
-      let funcName = 'anonymous';
-      if (functionScope === interpreter.globalScope) {
-          funcName = 'Global Frame';
-      } else if (state.func_ && state.func_.name) {
-          funcName = state.func_.name;
-      } else if (state.func_ && state.func_.node && state.func_.node.id) {
-          funcName = state.func_.node.id.name;
-      }
+      let funcName = state.func_.name || 'anonymous';
+      if (i === 0 && funcName === 'anonymous') funcName = 'Global Frame';
 
-      // 3. COLLECT VARIABLES (Walking UP the chain)
-      // We gather variables from the current block scope UP to the function scope
       const locals = {};
-      let varWalkScope = state.scope;
       
-      while (varWalkScope) {
-        for (const key in varWalkScope.properties) {
-          if (key === 'arguments' || key === 'this' || key === 'window' || key === 'console' || key === 'print') continue;
-          
-          // Don't overwrite variables if a child scope already defined them (shadowing)
-          if (locals[key] === undefined) {
-              const pseudoVal = varWalkScope.properties[key];
-              locals[key] = formatValue(pseudoVal, heap, interpreter);
-          }
-        }
-        if (varWalkScope === functionScope || varWalkScope === interpreter.globalScope) break;
-        varWalkScope = varWalkScope.parent;
+      // --- ROBUST EXTRACTION STRATEGY ---
+      // Strategy 1: Check the AST map first (Best for finding specific user vars)
+      const targetVars = variableMap[funcName] || variableMap['<global>'];
+      if (targetVars) {
+          targetVars.forEach(varName => {
+              const val = interpreter.getValueFromScope(state.scope, varName);
+              if (val !== interpreter.UNDEFINED) {
+                  locals[varName] = formatValue(val, heap, interpreter);
+              }
+          });
       }
 
-      // 4. CREATE OR UPDATE FRAME
-      // We use the functionScope object as the unique key. 
-      // This merges multiple states (like 'for' loop blocks) into one Function Frame.
-      uniqueFrames.set(functionScope, {
-          func_name: funcName,
-          lineno: node.loc ? node.loc.start.line : 0,
-          locals: locals
+      // Strategy 2: Fallback to scope properties (If AST missed something or failed)
+      // Only do this if locals is empty to avoid clutter, OR merge them carefully.
+      // Let's merge, but filter strictly.
+      if (state.scope.properties) {
+           for (const key in state.scope.properties) {
+              if (key === 'arguments' || key === 'this' || key === 'window' || key === 'console' || key === 'print') continue;
+              // Don't overwrite if AST already found it
+              if (!locals[key]) {
+                  const val = state.scope.properties[key];
+                  if (val !== interpreter.UNDEFINED) {
+                      locals[key] = formatValue(val, heap, interpreter);
+                  }
+              }
+           }
+      }
+
+      stack.push({
+        func_name: funcName,
+        lineno: node.loc ? node.loc.start.line : 0,
+        locals: locals
       });
     }
   }
-
-  // Convert our unique Map back to an Array for the visualizer
-  // JS Maps preserve insertion order, so this keeps the stack order correct (Global -> Main -> Func)
-  uniqueFrames.forEach(frame => stack.push(frame));
 
   return {
     line_number: node.loc ? node.loc.start.line : 0,
@@ -156,7 +184,7 @@ function captureState(interpreter, node) {
 }
 
 function formatValue(pseudoVal, heap, interpreter) {
-  if (pseudoVal === undefined) return { value: 'undefined' };
+  if (pseudoVal === undefined || pseudoVal === interpreter.UNDEFINED) return { value: 'undefined' };
   if (pseudoVal === null) return { value: 'null' };
 
   if (interpreter.isa(pseudoVal, interpreter.BOOLEAN)) return { value: String(pseudoVal.data) };
