@@ -1,19 +1,22 @@
-import { runJsCode } from './jsTracer'; // This line is actually not needed inside the file itself, but ensuring the export is correct below.
-
 export function runJsCode(code) {
   const trace = [];
   let stepCount = 0;
-  const MAX_STEPS = 1000;
+  const MAX_STEPS = 2000; // Increased limit for safety
 
   const initFunc = (interpreter, globalObject) => {
     const logWrapper = (text) => {
+      // Capture the current state *before* outputting, or at least preserve the last state
+      const lastSnap = trace.length > 0 ? trace[trace.length - 1] : { stack: [], heap: {} };
+      
       trace.push({
         event: 'output',
         data: text + '\n',
-        stack: [], // Ensure stack is present even for output
-        heap: {}
+        stack: lastSnap.stack, // Persist the stack for the output step
+        heap: lastSnap.heap,   // Persist the heap for the output step
+        line_number: lastSnap.line_number 
       });
     };
+
     interpreter.setProperty(globalObject, 'console', 
       interpreter.nativeToPseudo({ log: logWrapper }));
     interpreter.setProperty(globalObject, 'print', 
@@ -26,16 +29,21 @@ export function runJsCode(code) {
     while (myInterpreter.step() && stepCount < MAX_STEPS) {
       stepCount++;
       
+      // Safety check: if the stack is empty, we might be done or in a weird state
+      if (myInterpreter.stateStack.length === 0) break;
+
       const node = myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
       
-      // Capture state on statement-level nodes for better granularity
+      // Capture state on statement-level nodes
       if (node.start && node.end && (
           node.type === 'VariableDeclaration' || 
           node.type === 'ExpressionStatement' || 
           node.type === 'ReturnStatement' ||
           node.type === 'ForStatement' ||
+          node.type === 'WhileStatement' || // Added WhileStatement
           node.type === 'IfStatement' ||
-          node.type === 'FunctionDeclaration'
+          node.type === 'FunctionDeclaration' ||
+          node.type === 'CallExpression' // Added CallExpression for function calls
       )) { 
         const snapshot = captureState(myInterpreter, node);
         
@@ -47,6 +55,7 @@ export function runJsCode(code) {
       }
     }
   } catch (e) {
+    console.error("JS Trace Error:", e);
     trace.push({
       event: 'error',
       error_type: 'RuntimeError',
@@ -66,6 +75,8 @@ function captureState(interpreter, node) {
   let stateStack = interpreter.stateStack;
   
   // Iterate through the stack to build frames
+  // JS-Interpreter stack grows with execution. 
+  // We want to capture user-defined functions and the global scope.
   for (let i = 0; i < stateStack.length; i++) {
     const state = stateStack[i];
     if (state.scope) {
@@ -80,14 +91,13 @@ function captureState(interpreter, node) {
       
       // Walk the scope chain to get variables accessible in this frame
       let scope = state.scope;
-      // We only want the immediate scope for the frame to match Python's behavior
-      // However, JS scopes are nested. We'll grab the top-most scope variables.
+      
+      // Only capture the immediate scope variables to mimic Python's frame locals
       if (scope) {
         for (const key in scope.properties) {
           if (key === 'arguments' || key === 'this' || key === 'window' || key === 'console' || key === 'print') continue;
           
           const pseudoVal = scope.properties[key];
-          // formatValue updates the heap side-effectfully
           const formatted = formatValue(pseudoVal, heap, interpreter);
           locals[key] = formatted;
         }
@@ -101,11 +111,9 @@ function captureState(interpreter, node) {
     }
   }
   
-  // Filter out empty frames or internal wrapper frames if necessary
-  // For now, we reverse to match the top-down visualizer expectation (Global at top?)
-  // Actually, Python tracer puts Global at the bottom of the list in terms of recursion but visualization handles it.
-  // Let's stick to the order found: Global is usually 0 in JS interpreter. 
-  // Visualization expects: [Global, Function1, Function2...]
+  // Reverse stack to match the visualizer's expectation (Global at bottom/start, current at top/end? 
+  // actually your visualizer iterates: Global Frame, then others. 
+  // JS Interpreter stack is [Global, Call1, Call2]. This order is correct for your visualizer loop.
   
   return {
     line_number: node.loc ? node.loc.start.line : 0,
@@ -142,6 +150,8 @@ function formatValue(pseudoVal, heap, interpreter) {
       type = 'dict'; 
       // Extract object properties
       value = {}; // Change to object for dicts
+      // iterate over properties
+      // In JS-Interpreter, properties are in .properties dict
       for (const key in pseudoVal.properties) {
           value[key] = formatValue(pseudoVal.properties[key], heap, interpreter);
       }
