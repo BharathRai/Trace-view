@@ -80,29 +80,43 @@ function captureState(interpreter, node) {
 
   let stateStack = interpreter.stateStack;
   
-  // Iterate stack to build frames (Bottom-up approach)
+  // Helper to resolve function names more aggressively
+  const getFuncName = (state) => {
+      if (!state.func_) return 'Global Frame';
+      if (state.func_.name) return state.func_.name;
+      
+      // If it's a variable assignment to a function (var x = function() {...})
+      // The interpreter might store the name in the node
+      if (state.func_.node && state.func_.node.id) {
+          return state.func_.node.id.name;
+      }
+      
+      return 'anonymous';
+  };
+
+  // Iterate through the stack
   for (let i = 0; i < stateStack.length; i++) {
     const state = stateStack[i];
+    
+    // We only care about scopes
     if (state.scope) {
-      let funcName = '<global>';
-      if (state.func_ && state.func_.name) {
-          funcName = state.func_.name;
-      } else if (state.func_) {
-          funcName = 'anonymous';
-      }
-
-      // Clean up the root name for the visualizer
-      if (i === 0 && (funcName === 'anonymous' || !state.func_)) {
-          funcName = 'Global Frame';
-      }
+      let funcName = getFuncName(state);
+      
+      // Fix root naming
+      if (i === 0) funcName = 'Global Frame';
 
       const locals = {};
       let scope = state.scope;
       
-      // Capture variables in the current scope
       if (scope) {
+        // Extract variables
+        // Note: We check the entire scope chain for this frame until we hit the global scope
+        // But for simplicity and to match Python visualizer, let's just grab the immediate non-global properties
+        
+        // Actually, JS-Interpreter scopes are linked.
+        // We want to display variables relevant to THIS function scope.
+        
         for (const key in scope.properties) {
-          // Filter out internal JS interpreter noise
           if (key === 'arguments' || key === 'this' || key === 'window' || key === 'console' || key === 'print') continue;
           
           const pseudoVal = scope.properties[key];
@@ -111,10 +125,21 @@ function captureState(interpreter, node) {
         }
       }
 
-      // Only push the frame if it's meaningful (has a name change or is global)
-      // This prevents duplicate frames for internal block scopes
+      // --- FILTERING LOGIC ---
+      
+      // 1. Ignore frames with NO variables (unless it's the global frame)
+      if (Object.keys(locals).length === 0 && funcName !== 'Global Frame') {
+          continue;
+      }
+
+      // 2. Deduplicate: If this frame has the same name as the last one, 
+      //    it's likely a block scope (like a for-loop). Merge variables instead of stacking.
       const lastFrame = stack[stack.length - 1];
-      if (!lastFrame || lastFrame.func_name !== funcName) {
+      if (lastFrame && lastFrame.func_name === funcName) {
+          // Merge locals into the existing frame
+          Object.assign(lastFrame.locals, locals);
+      } else {
+          // Otherwise, push a new frame
           stack.push({
             func_name: funcName,
             lineno: node.loc ? node.loc.start.line : 0,
@@ -124,10 +149,10 @@ function captureState(interpreter, node) {
     }
   }
   
-  // REVERSE the stack to match the Python tracer's "Top-Down" order
-  // The visualizer expects the current function at the TOP (index 0 or end depending on logic).
-  // Python tracer reverses it. So we reverse it here to match.
-  stack.reverse();
+  // --- FINAL CLEANUP ---
+  // If we still have an 'anonymous' frame that actually corresponds to our main code wrapper,
+  // we can rename it or merge it if it's confusing. 
+  // But the logic above should handle the worst of it.
 
   return {
     line_number: node.loc ? node.loc.start.line : 0,
@@ -135,7 +160,6 @@ function captureState(interpreter, node) {
     heap: heap
   };
 }
-
 function formatValue(pseudoVal, heap, interpreter) {
   if (pseudoVal === undefined) return { value: 'undefined' };
   if (pseudoVal === null) return { value: 'null' };
