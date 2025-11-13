@@ -270,6 +270,17 @@ body {
   background-color: #222;
 }
 
+.lang-select {
+  background: #374151;
+  color: white;
+  padding: 0.5rem;
+  border: 1px solid #555;
+  border-radius: 6px;
+  margin-right: 10px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
 /* --- Responsive Mobile Layout --- */
 
 /* This rule applies to any screen 768px wide or less (like phones) */

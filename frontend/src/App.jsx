@@ -1,22 +1,21 @@
-// NEW: Import React and useRef
 import React, { useState, useEffect, useRef } from 'react';
 import CodeEditor from './components/CodeEditor';
 import Visualization from './components/Visualization';
 import Controls from './components/Controls';
 import AstDisplay from './components/AstDisplay';
+// This import ONLY works if the file is in src/utils/
+import { runJsCode } from './utils/jsTracer'; 
 import './styles/index.css';
 
-const initialCode = `def merge_sort(arr):
+const initialPythonCode = `def merge_sort(arr):
     if len(arr) > 1:
         mid = len(arr) // 2
         left_half = arr[:mid]
         right_half = arr[mid:]
 
-        # Recursive calls to sort both halves
         merge_sort(left_half)
         merge_sort(right_half)
 
-        # Merging process
         i = j = k = 0
         while i < len(left_half) and j < len(right_half):
             if left_half[i] < right_half[j]:
@@ -42,15 +41,30 @@ data = [38, 27, 43, 3, 9, 82, 10]
 sorted_data = merge_sort(data)
 print(f"Sorted array is: {sorted_data}")`;
 
-// NEW: Define the helper component for the pop-up
+const initialJsCode = `function bubbleSort(arr) {
+  var len = arr.length;
+  for (var i = 0; i < len; i++) {
+    for (var j = 0; j < len - i - 1; j++) {
+      if (arr[j] > arr[j + 1]) {
+        var temp = arr[j];
+        arr[j] = arr[j + 1];
+        arr[j + 1] = temp;
+      }
+    }
+  }
+  return arr;
+}
+
+var data = [64, 34, 25, 12, 22, 11, 90];
+print("Sorted: " + bubbleSort(data));`;
+
+// Helper component for the pop-up
 function ContextualFrameNode({ frame, position }) {
   if (!frame) return null;
 
-  // Filter variables
   const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
   const variables = frame.locals ? Object.entries(frame.locals).filter(([key]) => !IGNORED_VARS.includes(key)) : [];
 
-  // Hide the node if there are no variables to show
   if (variables.length === 0) {
     return null;
   }
@@ -70,31 +84,43 @@ function ContextualFrameNode({ frame, position }) {
   );
 }
 
-
 function App() {
-  const [code, setCode] = useState(initialCode);
+  const [language, setLanguage] = useState('python'); 
+  const [code, setCode] = useState(initialPythonCode);
   const [pyodide, setPyodide] = useState(null);
   const [trace, setTrace] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // NEW: State for the editor and the pop-up's position
   const editorRef = useRef(null);
   const [nodePosition, setNodePosition] = useState({ top: 0, left: 0, opacity: 0 });
 
-  // loadPyodide effect (no changes)
+  // Switch code when language changes
+  useEffect(() => {
+    if (language === 'python') {
+      setCode(initialPythonCode);
+    } else {
+      setCode(initialJsCode);
+    }
+    setTrace([]);
+    setCurrentStep(0);
+    setError(null);
+  }, [language]);
+
   useEffect(() => {
     async function loadPyodide() {
       try {
         console.log("Loading Pyodide...");
-        const pyodideInstance = await window.loadPyodide({
-          indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/"
-        });
-        console.log("Pyodide loaded successfully.");
-        const tracerCode = await (await fetch('/tracer.py')).text();
-        pyodideInstance.FS.writeFile("tracer.py", tracerCode, { encoding: "utf8" });
-        setPyodide(pyodideInstance);
+        if (!window.pyodide) { 
+            const pyodideInstance = await window.loadPyodide({
+            indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/"
+            });
+            console.log("Pyodide loaded successfully.");
+            const tracerCode = await (await fetch('/tracer.py')).text();
+            pyodideInstance.FS.writeFile("tracer.py", tracerCode, { encoding: "utf8" });
+            setPyodide(pyodideInstance);
+        }
       } catch (e) {
         console.error("Failed to load Pyodide:", e);
         setError({ details: "Could not load Python environment."});
@@ -105,40 +131,50 @@ function App() {
     loadPyodide();
   }, []);
 
-  // NEW: Effect to calculate the pop-up's position when the step changes
+  // Calculate pop-up position
   useEffect(() => {
     if (editorRef.current && trace[currentStep]) {
       const currentTrace = trace[currentStep];
-      // Get the top-most (current) frame from the stack
       const currentFrame = currentTrace.stack?.slice(-1)[0];
 
-      // Only show the pop-up if we are in a function call (not in <module>)
-      if (currentFrame && currentFrame.func_name !== '<module>') {
-        const currentLine = currentTrace.line_number;
-        
-        // Get Y coordinate (top) from Monaco
-        const top = editorRef.current.getTopForLineNumber(currentLine) - editorRef.current.getScrollTop();
-        
-        // Get X coordinate (left) - place it at 70% of the editor width
-        const left = editorRef.current.getLayoutInfo().width * 0.7;
+      // Check specific frame names for Python vs JS to avoid showing popups for internal wrappers
+      const isValidFrame = currentFrame && 
+                           currentFrame.func_name !== '<module>' && 
+                           currentFrame.func_name !== '<global>' &&
+                           currentFrame.func_name !== 'anonymous'; // JS often uses anonymous for main
 
+      if (isValidFrame) {
+        const currentLine = currentTrace.line_number;
+        const top = editorRef.current.getTopForLineNumber(currentLine) - editorRef.current.getScrollTop();
+        const left = editorRef.current.getLayoutInfo().width * 0.7;
         setNodePosition({ top, left, opacity: 1 });
       } else {
-        // Hide the pop-up if we are in the global scope or if there's no frame
         setNodePosition({ ...nodePosition, opacity: 0 });
       }
     } else {
-      // Hide the pop-up if tracing hasn't started
       setNodePosition({ ...nodePosition, opacity: 0 });
     }
-  }, [currentStep, trace]); // Re-run this effect when the step changes
+  }, [currentStep, trace]);
 
-  // runCode function (no changes)
   const runCode = () => {
-    if (!pyodide) return;
     setError(null);
     setTrace([]);
     setCurrentStep(0);
+
+    // --- JAVASCRIPT LOGIC ---
+    if (language === 'javascript') {
+        try {
+            const traceData = runJsCode(code);
+            setTrace(traceData);
+        } catch (e) {
+            setError({ details: e.message, aiHint: "Check your JavaScript syntax." });
+        }
+        return;
+    }
+
+    // --- PYTHON LOGIC ---
+    if (!pyodide) return;
+    
     const pythonScript = `
 import tracer
 user_code = """${code.replace(/"/g, '\\"')}"""
@@ -164,7 +200,6 @@ trace_json = tracer.run_user_code(user_code)
     }
   };
   
-  // handleError function (no changes)
   const handleError = async (errorStep) => {
     console.log("Error detected, getting AI explanation...", errorStep);
     try {
@@ -190,21 +225,29 @@ trace_json = tracer.run_user_code(user_code)
     }
   };
 
-  // NEW: Function to get the editor instance from the component
   function handleEditorMount(editor, monaco) {
     editorRef.current = editor;
   }
 
   return (
     <div className="app-container">
-      <header className="app-header">
+      <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Trace-View✨</h1>
+        
+        <select 
+            value={language} 
+            onChange={(e) => setLanguage(e.target.value)} 
+            className="lang-select"
+            style={{ background: '#374151', color: 'white', padding: '0.5rem', borderRadius: '6px', border: '1px solid #555' }}
+        >
+            <option value="python">Python 🐍</option>
+            <option value="javascript">JavaScript 🟨</option>
+        </select>
       </header>
 
       {isLoading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading Python Environment... 🐹</div>}
       
-      {!isLoading && pyodide && (
-        // NEW: Added position: 'relative' to the main content area
+      {(!isLoading || language === 'javascript') && (
         <main className="main-content" style={{ position: 'relative' }}>
           <div className="editor-panel">
             <Controls onRun={runCode} trace={trace} currentStep={currentStep} setCurrentStep={setCurrentStep} />
@@ -213,18 +256,17 @@ trace_json = tracer.run_user_code(user_code)
                   code={code}
                   setCode={setCode}
                   currentLine={trace[currentStep]?.line_number}
-                  // NEW: Pass the mount function to get the editor instance
                   onMount={handleEditorMount}
+                  language={language}
                 />
             </div>
           </div>
           <div className="visualization-panel">
             <Visualization traceStep={trace[currentStep]} error={error} />
             <hr style={{ margin: '2rem 0', borderColor: '#374151' }} />
-            <AstDisplay code={code} />
+            {language === 'python' && <AstDisplay code={code} />}
           </div>
 
-          {/* NEW: Render the pop-up node */}
           <ContextualFrameNode
             frame={trace[currentStep]?.stack?.slice(-1)[0]}
             position={nodePosition}

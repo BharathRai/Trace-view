@@ -1,39 +1,38 @@
 import Editor from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 
-function CodeEditor({ code, setCode, currentLine }) {
+// Added 'language' prop with a default value, and 'onMount' prop from parent
+function CodeEditor({ code, setCode, currentLine, onMount, language = 'python' }) {
   const editorRef = useRef(null);
-  // 1. Create a separate ref to hold the monaco instance
   const monacoRef = useRef(null); 
   const decorationsRef = useRef([]);
 
-  // 2. The onMount handler now stores both the editor and monaco instances
   function handleEditorDidMount(editor, monaco) {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    
+    // Call the parent's onMount handler if it exists
+    // This allows App.jsx to get a reference to the editor for positioning the pop-up
+    if (onMount) {
+        onMount(editor, monaco);
+    }
   }
   
   useEffect(() => {
-    // Ensure both refs are ready before proceeding
     if (editorRef.current && monacoRef.current) {
       if (currentLine) {
         decorationsRef.current = editorRef.current.deltaDecorations(
           decorationsRef.current,
-          [
-            {
-              // 3. Use the correct monacoRef to access .Range
-              range: new monacoRef.current.Range(currentLine, 1, currentLine, 1),
-              options: {
-                isWholeLine: true,
-                className: 'line-highlight',
-              }
+          [{
+            range: new monacoRef.current.Range(currentLine, 1, currentLine, 1),
+            options: {
+              isWholeLine: true,
+              className: 'line-highlight',
             }
-          ]
+          }]
         );
-        // Reveal the line if it's not in view
         editorRef.current.revealLineInCenter(currentLine);
       } else {
-        // If there's no currentLine, clear any existing highlights
         decorationsRef.current = editorRef.current.deltaDecorations(
           decorationsRef.current,
           []
@@ -45,7 +44,7 @@ function CodeEditor({ code, setCode, currentLine }) {
   return (
     <Editor
       height="100%"
-      language="python"
+      language={language} // Use the prop here to switch syntax highlighting
       theme="vs-dark"
       value={code}
       onChange={(value) => setCode(value)}
