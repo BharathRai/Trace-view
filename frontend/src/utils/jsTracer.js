@@ -22,21 +22,12 @@ export function runJsCode(code) {
   };
 
   try {
-    if (!window.Interpreter) {
-        throw new Error("JS-Interpreter not loaded. Check index.html");
+    if (!window.Interpreter || !window.acorn) {
+        throw new Error("JS-Interpreter or Acorn not loaded. Check index.html");
     }
 
-    // 1. Safely build the variable map. If Acorn fails, we continue without it.
-    let variableMap = { '<global>': new Set() };
-    try {
-        if (window.acorn) {
-            variableMap = buildVariableMap(code);
-        } else {
-            console.warn("Acorn not found. Variable tracking might be limited.");
-        }
-    } catch (err) {
-        console.warn("Failed to parse AST for variables:", err);
-    }
+    // 1. Parse the AST to find variable names per function
+    const variableMap = buildVariableMap(code);
 
     const myInterpreter = new window.Interpreter(code, initFunc);
 
@@ -47,7 +38,7 @@ export function runJsCode(code) {
 
       const node = myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
       
-      if (node.start && node.end && (
+      if (node && node.start && node.end && (
           node.type === 'VariableDeclaration' || 
           node.type === 'ExpressionStatement' || 
           node.type === 'ReturnStatement' ||
@@ -81,45 +72,76 @@ export function runJsCode(code) {
   return trace;
 }
 
+// --- HELPER: Build a map of Function Name -> [Variable Names] ---
 function buildVariableMap(code) {
     const map = { '<global>': new Set() };
     
-    // Use Acorn to parse the code
-    const ast = window.acorn.parse(code, { ecmaVersion: 2020 });
-    
-    const visit = (node, scopeName) => {
-        if (!node) return;
+    try {
+        const ast = window.acorn.parse(code, { ecmaVersion: 2020 });
+        
+        const visit = (node, scopeName) => {
+            if (!node) return;
 
-        if (node.type === 'FunctionDeclaration') {
-            const funcName = node.id.name;
-            map[funcName] = new Set();
-            node.params.forEach(p => map[funcName].add(p.name));
-            visit(node.body, funcName);
-            return;
-        } 
-        else if (node.type === 'VariableDeclaration') {
-            node.declarations.forEach(dec => {
-                if (dec.id.name) {
-                    map[scopeName].add(dec.id.name);
+            if (node.type === 'FunctionDeclaration' && node.id) {
+                const funcName = node.id.name;
+                map[funcName] = new Set();
+                if (node.params) {
+                    node.params.forEach(p => {
+                        if (p.name) map[funcName].add(p.name);
+                    });
                 }
-            });
-        }
+                
+                // Recurse into function body with new scope name
+                visit(node.body, funcName);
+                return; 
+            } 
+            else if (node.type === 'VariableDeclaration') {
+                node.declarations.forEach(dec => {
+                    if (dec.id && dec.id.name) {
+                        // Ensure the scopeName exists in the map
+                        if (!map[scopeName]) map[scopeName] = new Set();
+                        map[scopeName].add(dec.id.name);
+                    }
+                });
+            }
 
-        for (const key in node) {
-            if (typeof node[key] === 'object' && node[key] !== null) {
-                if (Array.isArray(node[key])) {
-                    node[key].forEach(child => visit(child, scopeName));
-                } else if (node[key].type) {
-                    visit(node[key], scopeName);
+            // Generic walker for children
+            for (const key in node) {
+                if (key === 'body' && node.type === 'FunctionDeclaration') continue;
+
+                if (node[key] && typeof node[key] === 'object') {
+                    if (Array.isArray(node[key])) {
+                        node[key].forEach(child => visit(child, scopeName));
+                    } else if (node[key].type) {
+                        visit(node[key], scopeName);
+                    }
                 }
             }
-        }
-    };
+        };
 
-    visit(ast, '<global>');
+        visit(ast, '<global>');
+    } catch (e) {
+        console.warn("Failed to parse AST:", e);
+    }
     return map;
 }
 
+// --- HELPER: Manually walk scope chain to find a variable ---
+function getValueFromScope(scope, name, interpreter) {
+    let currentScope = scope;
+    while (currentScope) {
+        // Safe property check
+        if (currentScope.properties && Object.prototype.hasOwnProperty.call(currentScope.properties, name)) {
+            return currentScope.properties[name];
+        }
+        
+        if (currentScope === interpreter.globalScope) {
+             break;
+        }
+        currentScope = currentScope.parent;
+    }
+    return interpreter.UNDEFINED;
+}
 
 function captureState(interpreter, node, variableMap) {
   const stack = [];
@@ -140,30 +162,24 @@ function captureState(interpreter, node, variableMap) {
 
       const locals = {};
       
-      // --- ROBUST EXTRACTION STRATEGY ---
-      // Strategy 1: Check the AST map first (Best for finding specific user vars)
+      // 1. Targeted Extraction using AST Map
       const targetVars = variableMap[funcName] || variableMap['<global>'];
       if (targetVars) {
           targetVars.forEach(varName => {
-              const val = interpreter.getValueFromScope(state.scope, varName);
+              const val = getValueFromScope(state.scope, varName, interpreter);
               if (val !== interpreter.UNDEFINED) {
                   locals[varName] = formatValue(val, heap, interpreter);
               }
           });
       }
 
-      // Strategy 2: Fallback to scope properties (If AST missed something or failed)
-      // Only do this if locals is empty to avoid clutter, OR merge them carefully.
-      // Let's merge, but filter strictly.
+      // 2. Fallback Extraction
       if (state.scope.properties) {
            for (const key in state.scope.properties) {
               if (key === 'arguments' || key === 'this' || key === 'window' || key === 'console' || key === 'print') continue;
-              // Don't overwrite if AST already found it
               if (!locals[key]) {
                   const val = state.scope.properties[key];
-                  if (val !== interpreter.UNDEFINED) {
-                      locals[key] = formatValue(val, heap, interpreter);
-                  }
+                  locals[key] = formatValue(val, heap, interpreter);
               }
            }
       }
