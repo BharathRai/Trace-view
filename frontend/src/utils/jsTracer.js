@@ -26,9 +26,7 @@ export function runJsCode(code) {
         throw new Error("JS-Interpreter or Acorn not loaded. Check index.html");
     }
 
-    // 1. Parse the AST to find variable names per function
     const variableMap = buildVariableMap(code);
-
     const myInterpreter = new window.Interpreter(code, initFunc);
 
     while (myInterpreter.step() && stepCount < MAX_STEPS) {
@@ -38,7 +36,7 @@ export function runJsCode(code) {
 
       const node = myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
       
-      if (node && node.start && node.end && (
+      if (node.start && node.end && (
           node.type === 'VariableDeclaration' || 
           node.type === 'ExpressionStatement' || 
           node.type === 'ReturnStatement' ||
@@ -72,73 +70,45 @@ export function runJsCode(code) {
   return trace;
 }
 
-// --- HELPER: Build a map of Function Name -> [Variable Names] ---
 function buildVariableMap(code) {
     const map = { '<global>': new Set() };
-    
     try {
         const ast = window.acorn.parse(code, { ecmaVersion: 2020 });
-        
         const visit = (node, scopeName) => {
             if (!node) return;
-
-            if (node.type === 'FunctionDeclaration' && node.id) {
+            if (node.type === 'FunctionDeclaration') {
                 const funcName = node.id.name;
                 map[funcName] = new Set();
-                if (node.params) {
-                    node.params.forEach(p => {
-                        if (p.name) map[funcName].add(p.name);
-                    });
-                }
-                
-                // Recurse into function body with new scope name
+                node.params.forEach(p => map[funcName].add(p.name));
                 visit(node.body, funcName);
-                return; 
-            } 
-            else if (node.type === 'VariableDeclaration') {
+                return;
+            } else if (node.type === 'VariableDeclaration') {
                 node.declarations.forEach(dec => {
-                    if (dec.id && dec.id.name) {
-                        // Ensure the scopeName exists in the map
-                        if (!map[scopeName]) map[scopeName] = new Set();
-                        map[scopeName].add(dec.id.name);
-                    }
+                    if (dec.id && dec.id.name) map[scopeName].add(dec.id.name);
                 });
             }
-
-            // Generic walker for children
             for (const key in node) {
                 if (key === 'body' && node.type === 'FunctionDeclaration') continue;
-
                 if (node[key] && typeof node[key] === 'object') {
-                    if (Array.isArray(node[key])) {
-                        node[key].forEach(child => visit(child, scopeName));
-                    } else if (node[key].type) {
-                        visit(node[key], scopeName);
-                    }
+                    if (Array.isArray(node[key])) node[key].forEach(child => visit(child, scopeName));
+                    else if (node[key].type) visit(node[key], scopeName);
                 }
             }
         };
-
         visit(ast, '<global>');
-    } catch (e) {
-        console.warn("Failed to parse AST:", e);
-    }
+    } catch (e) { console.warn("Failed to parse AST:", e); }
     return map;
 }
 
-// --- HELPER: Manually walk scope chain to find a variable ---
-function getValueFromScope(scope, name, interpreter) {
-    let currentScope = scope;
-    while (currentScope) {
-        // Safe property check
-        if (currentScope.properties && Object.prototype.hasOwnProperty.call(currentScope.properties, name)) {
-            return currentScope.properties[name];
+// Helper to get value from specific scope or any parent scope
+function getValueFromScopeChain(scope, name, interpreter) {
+    let current = scope;
+    while (current) {
+        if (current.properties && Object.prototype.hasOwnProperty.call(current.properties, name)) {
+            return current.properties[name];
         }
-        
-        if (currentScope === interpreter.globalScope) {
-             break;
-        }
-        currentScope = currentScope.parent;
+        if (current === interpreter.globalScope) break;
+        current = current.parent;
     }
     return interpreter.UNDEFINED;
 }
@@ -147,7 +117,6 @@ function captureState(interpreter, node, variableMap) {
   const stack = [];
   const heap = {};
   let stateStack = interpreter.stateStack;
-  
   const processedScopes = new Set();
 
   for (let i = 0; i < stateStack.length; i++) {
@@ -157,31 +126,44 @@ function captureState(interpreter, node, variableMap) {
       if (processedScopes.has(state.scope)) continue;
       processedScopes.add(state.scope);
 
-      let funcName = state.func_.name || 'anonymous';
-      if (i === 0 && funcName === 'anonymous') funcName = 'Global Frame';
+      // 1. FIX NAME RESOLUTION
+      let funcName = 'anonymous';
+      if (state.func_.name) {
+          funcName = state.func_.name;
+      } else if (state.func_.node && state.func_.node.id && state.func_.node.id.name) {
+          funcName = state.func_.node.id.name;
+      }
+      if (i === 0) funcName = 'Global Frame';
 
       const locals = {};
       
-      // 1. Targeted Extraction using AST Map
+      // 2. ROBUST VARIABLE EXTRACTION
+      // First: Try AST map
       const targetVars = variableMap[funcName] || variableMap['<global>'];
       if (targetVars) {
           targetVars.forEach(varName => {
-              const val = getValueFromScope(state.scope, varName, interpreter);
+              const val = getValueFromScopeChain(state.scope, varName, interpreter);
               if (val !== interpreter.UNDEFINED) {
                   locals[varName] = formatValue(val, heap, interpreter);
               }
           });
       }
 
-      // 2. Fallback Extraction
-      if (state.scope.properties) {
-           for (const key in state.scope.properties) {
-              if (key === 'arguments' || key === 'this' || key === 'window' || key === 'console' || key === 'print') continue;
-              if (!locals[key]) {
-                  const val = state.scope.properties[key];
-                  locals[key] = formatValue(val, heap, interpreter);
+      // Second: Walk the scope chain manually to catch anything else (like 'var' hoisted vars)
+      let currentScope = state.scope;
+      while (currentScope) {
+          if (currentScope.properties) {
+              for (const key in currentScope.properties) {
+                  if (['arguments','this','window','console','print'].includes(key)) continue;
+                  if (!locals[key]) { // Don't overwrite
+                      const val = currentScope.properties[key];
+                      locals[key] = formatValue(val, heap, interpreter);
+                  }
               }
-           }
+          }
+          // Stop walking up if we hit the global scope (unless this IS the global frame)
+          if (currentScope === interpreter.globalScope && funcName !== 'Global Frame') break;
+          currentScope = currentScope.parent;
       }
 
       stack.push({
