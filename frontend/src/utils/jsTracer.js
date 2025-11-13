@@ -22,11 +22,10 @@ export function runJsCode(code) {
   };
 
   try {
-    if (!window.Interpreter || !window.acorn) {
-        throw new Error("JS-Interpreter or Acorn not loaded. Check index.html");
+    if (!window.Interpreter) {
+        throw new Error("JS-Interpreter not loaded. Check index.html");
     }
 
-    const variableMap = buildVariableMap(code);
     const myInterpreter = new window.Interpreter(code, initFunc);
 
     while (myInterpreter.step() && stepCount < MAX_STEPS) {
@@ -36,6 +35,7 @@ export function runJsCode(code) {
 
       const node = myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
       
+      // Capture state on meaningful nodes
       if (node.start && node.end && (
           node.type === 'VariableDeclaration' || 
           node.type === 'ExpressionStatement' || 
@@ -48,7 +48,7 @@ export function runJsCode(code) {
           node.type === 'UpdateExpression' || 
           node.type === 'AssignmentExpression'
       )) { 
-        const snapshot = captureState(myInterpreter, node, variableMap);
+        const snapshot = captureState(myInterpreter, node);
         
         const lastSnap = trace[trace.length - 1];
         if (!lastSnap || lastSnap.line_number !== snapshot.line_number) {
@@ -70,107 +70,66 @@ export function runJsCode(code) {
   return trace;
 }
 
-function buildVariableMap(code) {
-    const map = { '<global>': new Set() };
-    try {
-        const ast = window.acorn.parse(code, { ecmaVersion: 2020 });
-        const visit = (node, scopeName) => {
-            if (!node) return;
-            if (node.type === 'FunctionDeclaration') {
-                const funcName = node.id.name;
-                map[funcName] = new Set();
-                node.params.forEach(p => map[funcName].add(p.name));
-                visit(node.body, funcName);
-                return;
-            } else if (node.type === 'VariableDeclaration') {
-                node.declarations.forEach(dec => {
-                    if (dec.id && dec.id.name) map[scopeName].add(dec.id.name);
-                });
-            }
-            for (const key in node) {
-                if (key === 'body' && node.type === 'FunctionDeclaration') continue;
-                if (node[key] && typeof node[key] === 'object') {
-                    if (Array.isArray(node[key])) node[key].forEach(child => visit(child, scopeName));
-                    else if (node[key].type) visit(node[key], scopeName);
-                }
-            }
-        };
-        visit(ast, '<global>');
-    } catch (e) { console.warn("Failed to parse AST:", e); }
-    return map;
-}
-
-// Helper to get value from specific scope or any parent scope
-function getValueFromScopeChain(scope, name, interpreter) {
-    let current = scope;
-    while (current) {
-        if (current.properties && Object.prototype.hasOwnProperty.call(current.properties, name)) {
-            return current.properties[name];
-        }
-        if (current === interpreter.globalScope) break;
-        current = current.parent;
-    }
-    return interpreter.UNDEFINED;
-}
-
-function captureState(interpreter, node, variableMap) {
+function captureState(interpreter, node) {
   const stack = [];
   const heap = {};
   let stateStack = interpreter.stateStack;
+  
+  // Track processed scopes to merge block-scopes (like 'for' loops) into their parent function frame
   const processedScopes = new Set();
 
   for (let i = 0; i < stateStack.length; i++) {
     const state = stateStack[i];
     
     if (state.scope && state.func_) {
-      if (processedScopes.has(state.scope)) continue;
-      processedScopes.add(state.scope);
-
-      // 1. FIX NAME RESOLUTION
+      // 1. Resolve Function Name
       let funcName = 'anonymous';
-      if (state.func_.name) {
-          funcName = state.func_.name;
-      } else if (state.func_.node && state.func_.node.id && state.func_.node.id.name) {
+      if (state.func_.node && state.func_.node.id) {
           funcName = state.func_.node.id.name;
+      } else if (state.func_.name) {
+          funcName = state.func_.name;
       }
       if (i === 0) funcName = 'Global Frame';
 
+      // 2. Collect Variables (Walking the Scope Chain)
+      // This is the logic that fixes the "empty frame" issue.
+      // We start at the current scope and walk UP until we hit the global scope.
       const locals = {};
-      
-      // 2. ROBUST VARIABLE EXTRACTION
-      // First: Try AST map
-      const targetVars = variableMap[funcName] || variableMap['<global>'];
-      if (targetVars) {
-          targetVars.forEach(varName => {
-              const val = getValueFromScopeChain(state.scope, varName, interpreter);
-              if (val !== interpreter.UNDEFINED) {
-                  locals[varName] = formatValue(val, heap, interpreter);
-              }
-          });
-      }
-
-      // Second: Walk the scope chain manually to catch anything else (like 'var' hoisted vars)
       let currentScope = state.scope;
+      
       while (currentScope) {
+          // Stop if we hit the global scope (we handle that in the 'Global Frame' only)
+          if (currentScope === interpreter.globalScope && funcName !== 'Global Frame') {
+              break;
+          }
+
           if (currentScope.properties) {
               for (const key in currentScope.properties) {
-                  if (['arguments','this','window','console','print'].includes(key)) continue;
-                  if (!locals[key]) { // Don't overwrite
+                  if (['arguments', 'this', 'window', 'console', 'print'].includes(key)) continue;
+                  
+                  // Don't overwrite variables we found in a closer scope
+                  if (locals[key] === undefined) {
                       const val = currentScope.properties[key];
                       locals[key] = formatValue(val, heap, interpreter);
                   }
               }
           }
-          // Stop walking up if we hit the global scope (unless this IS the global frame)
-          if (currentScope === interpreter.globalScope && funcName !== 'Global Frame') break;
           currentScope = currentScope.parent;
       }
 
-      stack.push({
-        func_name: funcName,
-        lineno: node.loc ? node.loc.start.line : 0,
-        locals: locals
-      });
+      // 3. Deduplicate Frames
+      // If this frame has the same name as the last one, it's likely a block scope (if/for).
+      // We update the existing frame with any new variables found.
+      const lastFrame = stack[stack.length - 1];
+      if (lastFrame && lastFrame.func_name === funcName) {
+          Object.assign(lastFrame.locals, locals);
+      } else {
+          stack.push({
+            func_name: funcName,
+            lineno: node.loc ? node.loc.start.line : 0,
+            locals: locals
+          });
+      }
     }
   }
 
@@ -182,7 +141,7 @@ function captureState(interpreter, node, variableMap) {
 }
 
 function formatValue(pseudoVal, heap, interpreter) {
-  if (pseudoVal === undefined || pseudoVal === interpreter.UNDEFINED) return { value: 'undefined' };
+  if (pseudoVal === undefined) return { value: 'undefined' };
   if (pseudoVal === null) return { value: 'null' };
 
   if (interpreter.isa(pseudoVal, interpreter.BOOLEAN)) return { value: String(pseudoVal.data) };
