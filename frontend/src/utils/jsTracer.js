@@ -22,8 +22,8 @@ export function runJsCode(code) {
   };
 
   try {
-    if (!window.Interpreter) {
-        throw new Error("JS-Interpreter not loaded. Check index.html");
+    if (!window.Interpreter || !window.acorn) {
+        throw new Error("JS-Interpreter or Acorn not loaded. Check index.html");
     }
 
     const myInterpreter = new window.Interpreter(code, initFunc);
@@ -74,64 +74,69 @@ function captureState(interpreter, node) {
   const stack = [];
   const heap = {};
   let stateStack = interpreter.stateStack;
-  
-  // Track processed scopes to merge block-scopes (like 'for' loops) into their parent function frame
-  const processedScopes = new Set();
+
+  // Use a Map to hold our *visual* frames, keyed by the root function scope
+  // This merges all block scopes (if, for) into their parent function.
+  const frameMap = new Map();
 
   for (let i = 0; i < stateStack.length; i++) {
     const state = stateStack[i];
+    if (!state.scope) continue;
+
+    // 1. Find the "owner" function scope for this state
+    let func = state.func_;
+    let funcScope = state.scope;
     
-    if (state.scope && state.func_) {
-      // 1. Resolve Function Name
-      let funcName = 'anonymous';
-      if (state.func_.node && state.func_.node.id) {
-          funcName = state.func_.node.id.name;
-      } else if (state.func_.name) {
-          funcName = state.func_.name;
-      }
-      if (i === 0) funcName = 'Global Frame';
+    // Walk up to find the *actual* function this block scope belongs to
+    let tempScope = state.scope;
+    while (tempScope) {
+        if (tempScope.func_) {
+            func = tempScope.func_;
+            funcScope = tempScope;
+            break;
+        }
+        if (tempScope === interpreter.globalScope) {
+            funcScope = tempScope; // Belongs to global
+            break;
+        }
+        tempScope = tempScope.parent;
+    }
 
-      // 2. Collect Variables (Walking the Scope Chain)
-      // This is the logic that fixes the "empty frame" issue.
-      // We start at the current scope and walk UP until we hit the global scope.
-      const locals = {};
-      let currentScope = state.scope;
-      
-      while (currentScope) {
-          // Stop if we hit the global scope (we handle that in the 'Global Frame' only)
-          if (currentScope === interpreter.globalScope && funcName !== 'Global Frame') {
-              break;
-          }
-
-          if (currentScope.properties) {
-              for (const key in currentScope.properties) {
-                  if (['arguments', 'this', 'window', 'console', 'print'].includes(key)) continue;
-                  
-                  // Don't overwrite variables we found in a closer scope
-                  if (locals[key] === undefined) {
-                      const val = currentScope.properties[key];
-                      locals[key] = formatValue(val, heap, interpreter);
-                  }
-              }
-          }
-          currentScope = currentScope.parent;
-      }
-
-      // 3. Deduplicate Frames
-      // If this frame has the same name as the last one, it's likely a block scope (if/for).
-      // We update the existing frame with any new variables found.
-      const lastFrame = stack[stack.length - 1];
-      if (lastFrame && lastFrame.func_name === funcName) {
-          Object.assign(lastFrame.locals, locals);
-      } else {
-          stack.push({
+    // 2. Get the function name
+    let funcName = "Global Frame";
+    if (func) {
+        if (func.name) funcName = func.name;
+        // Check the AST node for the function name (e.g., function bubbleSort() {...})
+        else if (func.node && func.node.id) funcName = func.node.id.name;
+        else funcName = 'anonymous';
+    }
+    
+    // 3. Get or create the visual frame
+    if (!frameMap.has(funcScope)) {
+        frameMap.set(funcScope, {
             func_name: funcName,
             lineno: node.loc ? node.loc.start.line : 0,
-            locals: locals
-          });
-      }
+            locals: {}
+        });
+    }
+
+    // 4. Populate variables from this specific state's scope
+    // This loop adds variables from the *immediate* scope (like 'j' in a 'for' loop)
+    // to the main function frame we identified.
+    const frame = frameMap.get(funcScope);
+    for (const key in state.scope.properties) {
+        if (['arguments','this','window','console','print'].includes(key)) continue;
+        
+        // Add if not already present from a deeper scope
+        if (frame.locals[key] === undefined) { 
+            const val = state.scope.properties[key];
+            frame.locals[key] = formatValue(val, heap, interpreter);
+        }
     }
   }
+  
+  // Convert map values to array
+  frameMap.forEach(frame => stack.push(frame));
 
   return {
     line_number: node.loc ? node.loc.start.line : 0,
@@ -141,7 +146,7 @@ function captureState(interpreter, node) {
 }
 
 function formatValue(pseudoVal, heap, interpreter) {
-  if (pseudoVal === undefined) return { value: 'undefined' };
+  if (pseudoVal === undefined || pseudoVal === interpreter.UNDEFINED) return { value: 'undefined' };
   if (pseudoVal === null) return { value: 'null' };
 
   if (interpreter.isa(pseudoVal, interpreter.BOOLEAN)) return { value: String(pseudoVal.data) };
