@@ -6,6 +6,7 @@ import AstDisplay from './components/AstDisplay';
 // This import ONLY works if the file is in src/utils/
 import { runJsCode } from './utils/jsTracer'; 
 import './styles/index.css';
+import ComplexityBar from './components/ComplexityBar';
 
 const initialPythonCode = `def merge_sort(arr):
     if len(arr) > 1:
@@ -92,6 +93,8 @@ function App() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [complexity, setComplexity] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const editorRef = useRef(null);
   const [nodePosition, setNodePosition] = useState({ top: 0, left: 0, opacity: 0 });
@@ -130,6 +133,33 @@ function App() {
     }
     loadPyodide();
   }, []);
+
+useEffect(() => {
+    // Don't analyze empty code
+    if (!code || code.trim() === '') return;
+
+    setIsAnalyzing(true);
+
+    // Debounce: Wait 1.5 seconds after the user STOPS typing
+    const timeoutId = setTimeout(async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/analyze-complexity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, language })
+        });
+        const data = await response.json();
+        setComplexity(data);
+      } catch (error) {
+        console.error("Analysis failed", error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }, 1500); // 1.5s delay
+
+    // Cleanup function: cancels the timer if the user types again
+    return () => clearTimeout(timeoutId);
+  }, [code, language]); // Re-run whenever code or language changes
 
   // Calculate pop-up position
   useEffect(() => {
@@ -249,9 +279,11 @@ trace_json = tracer.run_user_code(user_code)
       
       {(!isLoading || language === 'javascript') && (
         <main className="main-content" style={{ position: 'relative' }}>
-          <div className="editor-panel">
+          <div className="editor-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+            
             <Controls onRun={runCode} trace={trace} currentStep={currentStep} setCurrentStep={setCurrentStep} />
-            <div className="editor-wrapper">
+            
+            <div className="editor-wrapper" style={{ flexGrow: 1 }}>
                 <CodeEditor
                   code={code}
                   setCode={setCode}
@@ -260,7 +292,12 @@ trace_json = tracer.run_user_code(user_code)
                   language={language}
                 />
             </div>
+            
+            {/* 4. Add the Complexity Bar here at the bottom of the editor */}
+            <ComplexityBar complexity={complexity} loading={isAnalyzing} />
+
           </div>
+          
           <div className="visualization-panel">
             <Visualization traceStep={trace[currentStep]} error={error} />
             <hr style={{ margin: '2rem 0', borderColor: '#374151' }} />

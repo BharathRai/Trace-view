@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 import ast
 import graphviz
+import json
 
 load_dotenv()
 
@@ -37,6 +38,10 @@ except Exception as e:
 class ErrorRequest(BaseModel):
     code: str
     error_details: dict
+
+class ComplexityRequest(BaseModel):
+    code: str
+    language: str
 
 @app.post("/get-error-explanation")
 async def get_error_explanation(request: ErrorRequest):
@@ -71,6 +76,36 @@ async def get_error_explanation(request: ErrorRequest):
     except Exception as e:
         print(f"Gemini API call failed: {e}")
         return {"explanation": f"The AI assistant failed to process the request. Please check the backend terminal for detailed errors. Error: {e}"}
+
+@app.post("/analyze-complexity")
+async def analyze_complexity(request: ComplexityRequest):
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        Analyze the following {request.language} code and determine its Time Complexity and Space Complexity in Big O notation.
+        
+        Code:
+        ```{request.language}
+        {request.code}
+        ```
+        
+        Respond in this EXACT JSON format (do not add markdown ticks):
+        {{
+            "time": "O(...)",
+            "space": "O(...)",
+            "reason": "Brief one-sentence explanation."
+        }}
+        """
+        
+        response = model.generate_content(prompt)
+        # Clean up markdown if the AI adds it
+        clean_text = response.text.replace('```json', '').replace('```', '').strip()
+        return json.loads(clean_text)
+        
+    except Exception as e:
+        print(f"Complexity Analysis failed: {e}")
+        return {"time": "?", "space": "?", "reason": "Could not analyze."}
 
 # --- AST Visualization Logic (no changes here) ---
 class ASTVisualizer(ast.NodeVisitor):
