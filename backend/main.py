@@ -80,11 +80,11 @@ async def get_error_explanation(request: ErrorRequest):
 @app.post("/analyze-complexity")
 async def analyze_complexity(request: ComplexityRequest):
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         prompt = f"""
         Analyze the following {request.language} code and determine its Time Complexity and Space Complexity in Big O notation.
-        
+        You must also provide a detailed, step-by-step explanation of the time complexity derivation. For recursive functions, state the recurrence relation.
         Code:
         ```{request.language}
         {request.code}
