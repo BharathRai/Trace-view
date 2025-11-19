@@ -1,3 +1,5 @@
+# backend/main.py
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -41,7 +43,7 @@ class ComplexityRequest(BaseModel):
     code: str
     language: str
 
-# --- Local Complexity Analysis Logic (No API Call) ---
+# --- NEW: Local Complexity Analysis Logic (No API Call) ---
 class ComplexityAnalyzer(ast.NodeVisitor):
     def __init__(self):
         self.max_loop_depth = 0
@@ -93,6 +95,7 @@ class ComplexityAnalyzer(ast.NodeVisitor):
 
         # 2. Analyze Recursive Complexity
         if self.has_recursion:
+            # Heuristic for recursion
             time_complexity = "O(2^N) or O(N log N)" 
             space_complexity = "O(N)"
             reason.append(f"Recursion detected in functions: {', '.join(self.recursive_functions)}. Recursive algorithms typically use O(N) stack space.")
@@ -151,11 +154,12 @@ async def get_error_explanation(request: ErrorRequest):
         return {"explanation": f"AI Error: {str(e)}"}
 
 
-# --- AST Visualization Logic ---
+# --- AST Visualization Logic (No changes) ---
 class ASTVisualizer(ast.NodeVisitor):
     def __init__(self):
         self.dot = graphviz.Digraph(comment="Abstract Syntax Tree")
         self.dot.attr('node', shape='box', style='rounded,filled', fillcolor='lightblue')
+        self.dot.attr('edge', color='gray40')
         self.node_counter = 0
 
     def _get_node_label(self, node: ast.AST) -> str:

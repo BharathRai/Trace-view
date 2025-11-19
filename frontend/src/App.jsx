@@ -58,14 +58,16 @@ const initialJsCode = `function bubbleSort(arr) {
 var data = [64, 34, 25, 12, 22, 11, 90];
 print("Sorted: " + bubbleSort(data));`;
 
-// Pop-up helper component
+// Helper component for the pop-up
 function ContextualFrameNode({ frame, position }) {
   if (!frame) return null;
 
   const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
   const variables = frame.locals ? Object.entries(frame.locals).filter(([key]) => !IGNORED_VARS.includes(key)) : [];
 
-  if (variables.length === 0) return null;
+  if (variables.length === 0) {
+    return null;
+  }
 
   return (
     <div className="inline-frame-node" style={{ top: position.top, left: position.left, opacity: position.opacity }}>
@@ -98,6 +100,7 @@ function App() {
   const editorRef = useRef(null);
   const [nodePosition, setNodePosition] = useState({ top: 0, left: 0, opacity: 0 });
 
+  // Switch code when language changes
   useEffect(() => {
     if (language === 'python') {
       setCode(initialPythonCode);
@@ -110,6 +113,7 @@ function App() {
     setComplexity(null);
   }, [language]);
 
+  // Load Pyodide on startup
   useEffect(() => {
     async function loadPyodide() {
       try {
@@ -138,7 +142,7 @@ function App() {
     if (!code || code.trim() === '') return;
     
     setIsAnalyzing(true);
-    setComplexity(null);
+    setComplexity(null); // Clear old results
 
     try {
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/analyze-complexity`, {
@@ -156,6 +160,7 @@ function App() {
     }
   };
 
+  // Calculate pop-up position
   useEffect(() => {
     if (editorRef.current && trace[currentStep]) {
       const currentTrace = trace[currentStep];
@@ -184,6 +189,7 @@ function App() {
     setTrace([]);
     setCurrentStep(0);
 
+    // --- JAVASCRIPT LOGIC ---
     if (language === 'javascript') {
         try {
             const traceData = runJsCode(code);
@@ -194,6 +200,7 @@ function App() {
         return;
     }
 
+    // --- PYTHON LOGIC ---
     if (!pyodide) return;
     
     const pythonScript = `
@@ -254,6 +261,7 @@ trace_json = tracer.run_user_code(user_code)
     <div className="app-container">
       <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Trace-View✨</h1>
+        
         <select 
             value={language} 
             onChange={(e) => setLanguage(e.target.value)} 
@@ -271,6 +279,7 @@ trace_json = tracer.run_user_code(user_code)
         <main className="main-content" style={{ position: 'relative' }}>
           <div className="editor-panel" style={{ display: 'flex', flexDirection: 'column' }}>
             
+            {/* Pass both functions to Controls */}
             <Controls 
                 onRunAndTrace={runCode} 
                 onAnalyzeComplexity={triggerComplexityAnalysis} 
@@ -289,6 +298,7 @@ trace_json = tracer.run_user_code(user_code)
                 />
             </div>
             
+            {/* Pass Complexity State and Loading Status */}
             <ComplexityBar complexity={complexity} loading={isAnalyzing} />
 
           </div>
