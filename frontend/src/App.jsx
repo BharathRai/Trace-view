@@ -4,8 +4,8 @@ import Visualization from './components/Visualization';
 import Controls from './components/Controls';
 import AstDisplay from './components/AstDisplay';
 import { runJsCode } from './utils/jsTracer'; 
-import './styles/index.css';
 import ComplexityBar from './components/ComplexityBar';
+import './styles/index.css';
 
 const initialPythonCode = `def merge_sort(arr):
     if len(arr) > 1:
@@ -58,16 +58,14 @@ const initialJsCode = `function bubbleSort(arr) {
 var data = [64, 34, 25, 12, 22, 11, 90];
 print("Sorted: " + bubbleSort(data));`;
 
-// Helper component for the pop-up
+// Pop-up helper component
 function ContextualFrameNode({ frame, position }) {
   if (!frame) return null;
 
   const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
   const variables = frame.locals ? Object.entries(frame.locals).filter(([key]) => !IGNORED_VARS.includes(key)) : [];
 
-  if (variables.length === 0) {
-    return null;
-  }
+  if (variables.length === 0) return null;
 
   return (
     <div className="inline-frame-node" style={{ top: position.top, left: position.left, opacity: position.opacity }}>
@@ -93,14 +91,13 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // ADDED: State for complexity analysis
+  // Complexity State
   const [complexity, setComplexity] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const editorRef = useRef(null);
   const [nodePosition, setNodePosition] = useState({ top: 0, left: 0, opacity: 0 });
 
-  // Switch code when language changes
   useEffect(() => {
     if (language === 'python') {
       setCode(initialPythonCode);
@@ -110,7 +107,7 @@ function App() {
     setTrace([]);
     setCurrentStep(0);
     setError(null);
-    setComplexity(null); // Reset complexity on language change
+    setComplexity(null);
   }, [language]);
 
   useEffect(() => {
@@ -136,48 +133,38 @@ function App() {
     loadPyodide();
   }, []);
 
-// ADDED: Real-time Complexity Analysis Effect with Debounce
-useEffect(() => {
-    // Don't analyze empty code
+  // Manual Complexity Trigger
+  const triggerComplexityAnalysis = async () => {
     if (!code || code.trim() === '') return;
     
-    // Clear old result and indicate loading
-    setComplexity(null);
     setIsAnalyzing(true);
+    setComplexity(null);
 
-    // Debounce: Wait 1.5 seconds after the user STOPS typing
-    const timeoutId = setTimeout(async () => {
-      try {
+    try {
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/analyze-complexity`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, language })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, language })
         });
         const data = await response.json();
         setComplexity(data);
-      } catch (error) {
+    } catch (error) {
         console.error("Analysis failed", error);
         setComplexity({ time: '?', space: '?', derivation: `Analysis failed: ${error.message}` });
-      } finally {
+    } finally {
         setIsAnalyzing(false);
-      }
-    }, 1500); // 1.5s delay
+    }
+  };
 
-    // Cleanup function: cancels the timer if the code changes again
-    return () => clearTimeout(timeoutId);
-}, [code, language]); 
-
-  // Calculate pop-up position
   useEffect(() => {
     if (editorRef.current && trace[currentStep]) {
       const currentTrace = trace[currentStep];
       const currentFrame = currentTrace.stack?.slice(-1)[0];
 
-      // Check specific frame names for Python vs JS to avoid showing popups for internal wrappers
       const isValidFrame = currentFrame && 
                            currentFrame.func_name !== '<module>' && 
                            currentFrame.func_name !== '<global>' &&
-                           currentFrame.func_name !== 'anonymous'; // JS often uses anonymous for main
+                           currentFrame.func_name !== 'anonymous';
 
       if (isValidFrame) {
         const currentLine = currentTrace.line_number;
@@ -197,7 +184,6 @@ useEffect(() => {
     setTrace([]);
     setCurrentStep(0);
 
-    // --- JAVASCRIPT LOGIC ---
     if (language === 'javascript') {
         try {
             const traceData = runJsCode(code);
@@ -208,7 +194,6 @@ useEffect(() => {
         return;
     }
 
-    // --- PYTHON LOGIC ---
     if (!pyodide) return;
     
     const pythonScript = `
@@ -269,7 +254,6 @@ trace_json = tracer.run_user_code(user_code)
     <div className="app-container">
       <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Trace-View✨</h1>
-        
         <select 
             value={language} 
             onChange={(e) => setLanguage(e.target.value)} 
@@ -287,7 +271,13 @@ trace_json = tracer.run_user_code(user_code)
         <main className="main-content" style={{ position: 'relative' }}>
           <div className="editor-panel" style={{ display: 'flex', flexDirection: 'column' }}>
             
-            <Controls onRun={runCode} trace={trace} currentStep={currentStep} setCurrentStep={setCurrentStep} />
+            <Controls 
+                onRunAndTrace={runCode} 
+                onAnalyzeComplexity={triggerComplexityAnalysis} 
+                trace={trace} 
+                currentStep={currentStep} 
+                setCurrentStep={setCurrentStep} 
+            />
             
             <div className="editor-wrapper" style={{ flexGrow: 1 }}>
                 <CodeEditor
@@ -299,7 +289,6 @@ trace_json = tracer.run_user_code(user_code)
                 />
             </div>
             
-            {/* 4. Add the Complexity Bar here at the bottom of the editor */}
             <ComplexityBar complexity={complexity} loading={isAnalyzing} />
 
           </div>
@@ -307,7 +296,6 @@ trace_json = tracer.run_user_code(user_code)
           <div className="visualization-panel">
             <Visualization traceStep={trace[currentStep]} error={error} />
             <hr style={{ margin: '2rem 0', borderColor: '#374151' }} />
-            {/* AST is only available for Python currently */}
             {language === 'python' && <AstDisplay code={code} />}
           </div>
 

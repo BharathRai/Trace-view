@@ -1,5 +1,3 @@
-# backend/main.py
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -14,11 +12,11 @@ load_dotenv()
 
 app = FastAPI()
 
-# CORS Middleware (no changes here)
+# CORS Middleware
 origins = [
     "http://localhost:5173", 
     "http://127.0.0.1:5173",
-    "https://trace-view.onrender.com"  # Add this line
+    "https://trace-view.onrender.com" 
 ]
 
 app.add_middleware(
@@ -29,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Gemini API setup (no changes here)
+# Gemini API setup (Only used for Error Explanations)
 try:
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 except Exception as e:
@@ -43,76 +41,121 @@ class ComplexityRequest(BaseModel):
     code: str
     language: str
 
-@app.post("/get-error-explanation")
-async def get_error_explanation(request: ErrorRequest):
-    try:
-        # Corrected the model name from 2.5 to 1.5
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
-    except Exception as e:
-        return {"explanation": f"Could not initialize the AI model. Please check your API key. Error: {e}"}
+# --- Local Complexity Analysis Logic (No API Call) ---
+class ComplexityAnalyzer(ast.NodeVisitor):
+    def __init__(self):
+        self.max_loop_depth = 0
+        self.current_loop_depth = 0
+        self.has_recursion = False
+        self.defined_functions = set()
+        self.recursive_functions = set()
 
-    prompt = f"""
-    You are an expert Python programming tutor who explains errors to beginners.
-    A student ran this code:
-    ```python
-    {request.code}
-    ```
-    And got this error on line {request.error_details.get('line_number')}:
-    {request.error_details.get('error_type')}: {request.error_details.get('error_message')}
-    
-    Explain the error in a simple, friendly tone and suggest a fix.
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        
-        if not response.parts:
-            block_reason = response.prompt_feedback.block_reason.name
-            print(f"Gemini API call was blocked. Reason: {block_reason}")
-            return {"explanation": f"The request was blocked by the AI's safety filter ({block_reason}). Please modify the code and try again."}
+    def visit_FunctionDef(self, node):
+        self.defined_functions.add(node.name)
+        self.generic_visit(node)
 
-        return {"explanation": response.text}
-        
-    except Exception as e:
-        print(f"Gemini API call failed: {e}")
-        return {"explanation": f"The AI assistant failed to process the request. Please check the backend terminal for detailed errors. Error: {e}"}
+    def visit_For(self, node):
+        self.current_loop_depth += 1
+        self.max_loop_depth = max(self.max_loop_depth, self.current_loop_depth)
+        self.generic_visit(node)
+        self.current_loop_depth -= 1
+
+    def visit_While(self, node):
+        self.current_loop_depth += 1
+        self.max_loop_depth = max(self.max_loop_depth, self.current_loop_depth)
+        self.generic_visit(node)
+        self.current_loop_depth -= 1
+
+    def visit_Call(self, node):
+        # Check for recursion
+        if isinstance(node.func, ast.Name) and node.func.id in self.defined_functions:
+            self.has_recursion = True
+            self.recursive_functions.add(node.func.id)
+        self.generic_visit(node)
+
+    def get_report(self):
+        time_complexity = "O(1)"
+        space_complexity = "O(1)"
+        reason = []
+
+        # 1. Analyze Iterative Complexity
+        if self.max_loop_depth == 0:
+            reason.append("No loops detected (Constant time).")
+        elif self.max_loop_depth == 1:
+            time_complexity = "O(N)"
+            reason.append("Single loop detected (Linear time).")
+        elif self.max_loop_depth == 2:
+            time_complexity = "O(N^2)"
+            reason.append("Nested loops detected (Quadratic time).")
+        else:
+            time_complexity = f"O(N^{self.max_loop_depth})"
+            reason.append(f"{self.max_loop_depth} nested loops detected.")
+
+        # 2. Analyze Recursive Complexity
+        if self.has_recursion:
+            time_complexity = "O(2^N) or O(N log N)" 
+            space_complexity = "O(N)"
+            reason.append(f"Recursion detected in functions: {', '.join(self.recursive_functions)}. Recursive algorithms typically use O(N) stack space.")
+
+        return {
+            "time": time_complexity,
+            "space": space_complexity,
+            "derivation": " ".join(reason)
+        }
 
 @app.post("/analyze-complexity")
 async def analyze_complexity(request: ComplexityRequest):
-    try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        prompt = f"""
-        Analyze the following {request.language} code and determine its Time Complexity and Space Complexity in Big O notation.
-        You must also provide a detailed, step-by-step explanation of the time complexity derivation. For recursive functions, state the recurrence relation.
-        Code:
-        ```{request.language}
-        {request.code}
-        ```
-        
-        Respond in this EXACT JSON format (do not add markdown ticks):
-        {{
-            "time": "O(...)",
-            "space": "O(...)",
-            "reason": "Brief one-sentence explanation."
-        }}
-        """
-        
-        response = model.generate_content(prompt)
-        # Clean up markdown if the AI adds it
-        clean_text = response.text.replace('```json', '').replace('```', '').strip()
-        return json.loads(clean_text)
-        
-    except Exception as e:
-        print(f"Complexity Analysis failed: {e}")
-        return {"time": "?", "space": "?", "reason": "Could not analyze."}
+    # Local analysis only supports Python
+    if request.language.lower() == 'python':
+        try:
+            tree = ast.parse(request.code)
+            analyzer = ComplexityAnalyzer()
+            analyzer.visit(tree)
+            return analyzer.get_report()
+        except SyntaxError:
+            return {
+                "time": "Error", 
+                "space": "Error", 
+                "derivation": "Syntax Error: Could not analyze complexity."
+            }
+        except Exception as e:
+             return {
+                "time": "?", 
+                "space": "?", 
+                "derivation": f"Analysis failed: {str(e)}"
+            }
+            
+    elif request.language.lower() == 'javascript':
+        return {
+            "time": "Unknown",
+            "space": "Unknown",
+            "derivation": "Local complexity analysis is currently only supported for Python code."
+        }
+    
+    return {"time": "?", "space": "?", "derivation": "Unsupported language."}
 
-# --- AST Visualization Logic (no changes here) ---
+
+@app.post("/get-error-explanation")
+async def get_error_explanation(request: ErrorRequest):
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        prompt = f"""
+        You are an expert Python programming tutor. 
+        Explain this error in simple terms:
+        Code: {request.code}
+        Error: {request.error_details.get('error_message')} on line {request.error_details.get('line_number')}
+        """
+        response = model.generate_content(prompt)
+        return {"explanation": response.text}
+    except Exception as e:
+        return {"explanation": f"AI Error: {str(e)}"}
+
+
+# --- AST Visualization Logic ---
 class ASTVisualizer(ast.NodeVisitor):
     def __init__(self):
         self.dot = graphviz.Digraph(comment="Abstract Syntax Tree")
         self.dot.attr('node', shape='box', style='rounded,filled', fillcolor='lightblue')
-        self.dot.attr('edge', color='gray40')
         self.node_counter = 0
 
     def _get_node_label(self, node: ast.AST) -> str:
@@ -120,7 +163,6 @@ class ASTVisualizer(ast.NodeVisitor):
         if isinstance(node, ast.FunctionDef): label += f"\\n(name='{node.name}')"
         elif isinstance(node, ast.Name): label += f"\\n(id='{node.id}')"
         elif isinstance(node, ast.Constant): label += f"\\n(value={ast.unparse(node)})"
-        elif isinstance(node, ast.BinOp): op_type = type(node.op).__name__; label += f"\\n(op='{op_type}')"
         return label
 
     def visit(self, node: ast.AST) -> str:
@@ -132,20 +174,13 @@ class ASTVisualizer(ast.NodeVisitor):
             self.dot.edge(current_id, child_id)
         return current_id
 
-class CodeRequest(BaseModel):
-    code: str
-
 @app.post("/get-ast-visualization")
 async def get_ast_visualization(request: CodeRequest):
     try:
         tree = ast.parse(request.code)
         visualizer = ASTVisualizer()
         visualizer.visit(tree)
-        
         svg_data = visualizer.dot.pipe(format='svg')
-        
         return {"svg_data": svg_data.decode('utf-8')}
-    except SyntaxError as e:
-        return {"error": f"Invalid Python Code: {e}"}
     except Exception as e:
         return {"error": f"An unexpected error occurred: {e}"}
