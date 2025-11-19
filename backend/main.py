@@ -1,5 +1,3 @@
-# backend/main.py
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -95,7 +93,6 @@ class ComplexityAnalyzer(ast.NodeVisitor):
 
         # 2. Analyze Recursive Complexity
         if self.has_recursion:
-            # Heuristic for recursion
             time_complexity = "O(2^N) or O(N log N)" 
             space_complexity = "O(N)"
             reason.append(f"Recursion detected in functions: {', '.join(self.recursive_functions)}. Recursive algorithms typically use O(N) stack space.")
@@ -167,6 +164,7 @@ class ASTVisualizer(ast.NodeVisitor):
         if isinstance(node, ast.FunctionDef): label += f"\\n(name='{node.name}')"
         elif isinstance(node, ast.Name): label += f"\\n(id='{node.id}')"
         elif isinstance(node, ast.Constant): label += f"\\n(value={ast.unparse(node)})"
+        elif isinstance(node, ast.BinOp): op_type = type(node.op).__name__; label += f"\\n(op='{op_type}')"
         return label
 
     def visit(self, node: ast.AST) -> str:
@@ -178,6 +176,9 @@ class ASTVisualizer(ast.NodeVisitor):
             self.dot.edge(current_id, child_id)
         return current_id
 
+class CodeRequest(BaseModel):
+    code: str
+
 @app.post("/get-ast-visualization")
 async def get_ast_visualization(request: CodeRequest):
     try:
@@ -186,5 +187,7 @@ async def get_ast_visualization(request: CodeRequest):
         visualizer.visit(tree)
         svg_data = visualizer.dot.pipe(format='svg')
         return {"svg_data": svg_data.decode('utf-8')}
+    except SyntaxError as e:
+        return {"error": f"Invalid Python Code: {e}"}
     except Exception as e:
         return {"error": f"An unexpected error occurred: {e}"}
