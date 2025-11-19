@@ -1,7 +1,6 @@
 import Editor from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 
-// Added 'language' prop with a default value, and 'onMount' prop from parent
 function CodeEditor({ code, setCode, currentLine, onMount, language = 'python' }) {
   const editorRef = useRef(null);
   const monacoRef = useRef(null); 
@@ -11,20 +10,23 @@ function CodeEditor({ code, setCode, currentLine, onMount, language = 'python' }
     editorRef.current = editor;
     monacoRef.current = monaco;
     
-    // Call the parent's onMount handler if it exists
-    // This allows App.jsx to get a reference to the editor for positioning the pop-up
     if (onMount) {
         onMount(editor, monaco);
     }
   }
   
   useEffect(() => {
+    // --- FIX: Check if monacoRef.current exists before using it ---
     if (editorRef.current && monacoRef.current) {
+      
+      const monaco = monacoRef.current; // Access monaco instance safely
+
       if (currentLine) {
         decorationsRef.current = editorRef.current.deltaDecorations(
           decorationsRef.current,
           [{
-            range: new monacoRef.current.Range(currentLine, 1, currentLine, 1),
+            // Use the safe variable 'monaco' instead of monacoRef.current directly if you want
+            range: new monaco.Range(currentLine, 1, currentLine, 1),
             options: {
               isWholeLine: true,
               className: 'line-highlight',
@@ -39,12 +41,12 @@ function CodeEditor({ code, setCode, currentLine, onMount, language = 'python' }
         );
       }
     }
-  }, [currentLine]);
+  }, [currentLine]); // This effect runs whenever currentLine changes
 
   return (
     <Editor
       height="100%"
-      language={language} // Use the prop here to switch syntax highlighting
+      language={language}
       theme="vs-dark"
       value={code}
       onChange={(value) => setCode(value)}
