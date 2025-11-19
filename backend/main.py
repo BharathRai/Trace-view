@@ -21,8 +21,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    # Allow all origins to ensure connection works
-    allow_origins=["*"], 
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,61 +41,36 @@ class ComplexityRequest(BaseModel):
     code: str
     language: str
 
-# --- NEW: Smart Algorithmic Complexity Analyzer ---
+# --- NEW: Local Complexity Analysis Logic (No API Call) ---
 class ComplexityAnalyzer(ast.NodeVisitor):
     def __init__(self):
-        self.complexity = "O(1)"
-        self.reason = "Constant time operations."
-        self.loops = 0
-        self.nested_loops = 0
-        self.recursion_found = False
-        self.recursion_count = 0
-        self.recursive_funcs = set()
-        self.func_names = set()
-        self.recursion_type = None # 'linear' (n-1) or 'log' (n/2)
-        self.has_loop_in_recursion = False
+        self.max_loop_depth = 0
+        self.current_loop_depth = 0
+        self.has_recursion = False
+        self.defined_functions = set()
+        self.recursive_functions = set()
 
     def visit_FunctionDef(self, node):
-        self.func_names.add(node.name)
+        self.defined_functions.add(node.name)
         self.generic_visit(node)
 
     def visit_For(self, node):
-        self.loops += 1
-        # Check nesting
-        for child in ast.walk(node):
-            if isinstance(child, (ast.For, ast.While)) and child != node:
-                self.nested_loops = max(self.nested_loops, 2)
-        
-        if self.recursion_found: 
-             self.has_loop_in_recursion = True
+        self.current_loop_depth += 1
+        self.max_loop_depth = max(self.max_loop_depth, self.current_loop_depth)
         self.generic_visit(node)
+        self.current_loop_depth -= 1
 
     def visit_While(self, node):
-        self.loops += 1
-        # Check nesting
-        for child in ast.walk(node):
-            if isinstance(child, (ast.For, ast.While)) and child != node:
-                self.nested_loops = max(self.nested_loops, 2)
-        
-        if self.recursion_found:
-             self.has_loop_in_recursion = True
+        self.current_loop_depth += 1
+        self.max_loop_depth = max(self.max_loop_depth, self.current_loop_depth)
         self.generic_visit(node)
+        self.current_loop_depth -= 1
 
     def visit_Call(self, node):
-        if isinstance(node.func, ast.Name) and node.func.id in self.func_names:
-            self.recursion_found = True
-            self.recursion_count += 1
-            self.recursive_funcs.add(node.func.id)
-            
-            # --- KEY LOGIC: Detect Recursion Pattern ---
-            # Check arguments to see if we are dividing (Merge Sort) or subtracting (Fibonacci)
-            for arg in node.args:
-                # Look for Division (mid // 2) or Slicing (arr[:mid]) -> Implies O(log N)
-                if isinstance(arg, ast.BinOp) and isinstance(arg.op, (ast.Div, ast.FloorDiv)):
-                    self.recursion_type = 'log'
-                elif isinstance(arg, ast.Subscript): # Slicing often means dividing input
-                    self.recursion_type = 'log'
-                
+        # Check for recursion
+        if isinstance(node.func, ast.Name) and node.func.id in self.defined_functions:
+            self.has_recursion = True
+            self.recursive_functions.add(node.func.id)
         self.generic_visit(node)
 
     def get_report(self):
@@ -104,41 +78,24 @@ class ComplexityAnalyzer(ast.NodeVisitor):
         space_complexity = "O(1)"
         reason = []
 
-        # 1. Analyze Recursive Patterns (Priority)
-        if self.recursion_found:
-            # CASE A: Linearithmic (Merge Sort)
-            if self.recursion_type == 'log' and (self.loops > 0 or self.has_loop_in_recursion):
-                time_complexity = "O(N log N)"
-                space_complexity = "O(N)"
-                reason.append("Detected 'Divide and Conquer' recursion (splitting input) combined with iterative processing (loops). This structure typically results in N log N complexity.")
-            
-            # CASE B: Logarithmic (Binary Search)
-            elif self.recursion_type == 'log':
-                time_complexity = "O(log N)"
-                space_complexity = "O(log N)"
-                reason.append("Detected recursive division of input without full iteration. This implies Logarithmic time.")
-
-            # CASE C: Exponential (Fibonacci)
-            elif self.recursion_count >= 2:
-                time_complexity = "O(2^N)"
-                space_complexity = "O(N)"
-                reason.append(f"Detected multiple recursive calls ({self.recursion_count}) per step. This 'branching' recursion typically results in Exponential time.")
-            
-            # CASE D: Linear Recursion
-            else:
-                time_complexity = "O(N)"
-                space_complexity = "O(N)"
-                reason.append("Detected simple linear recursion (depth correlates to input size).")
-
-        # 2. Analyze Iterative Patterns
-        elif self.nested_loops >= 2:
-            time_complexity = "O(N^2)"
-            space_complexity = "O(1)"
-            reason.append("Detected nested loops. This results in Quadratic time complexity.")
-        elif self.loops > 0:
+        # 1. Analyze Iterative Complexity
+        if self.max_loop_depth == 0:
+            reason.append("No loops detected (Constant time).")
+        elif self.max_loop_depth == 1:
             time_complexity = "O(N)"
-            space_complexity = "O(1)"
-            reason.append("Detected a single loop iterating over input. This results in Linear time complexity.")
+            reason.append("Single loop detected (Linear time).")
+        elif self.max_loop_depth == 2:
+            time_complexity = "O(N^2)"
+            reason.append("Nested loops detected (Quadratic time).")
+        else:
+            time_complexity = f"O(N^{self.max_loop_depth})"
+            reason.append(f"{self.max_loop_depth} nested loops detected.")
+
+        # 2. Analyze Recursive Complexity
+        if self.has_recursion:
+            time_complexity = "O(2^N) or O(N log N)" 
+            space_complexity = "O(N)"
+            reason.append(f"Recursion detected in functions: {', '.join(self.recursive_functions)}. Recursive algorithms typically use O(N) stack space.")
 
         return {
             "time": time_complexity,
@@ -207,6 +164,7 @@ class ASTVisualizer(ast.NodeVisitor):
         if isinstance(node, ast.FunctionDef): label += f"\\n(name='{node.name}')"
         elif isinstance(node, ast.Name): label += f"\\n(id='{node.id}')"
         elif isinstance(node, ast.Constant): label += f"\\n(value={ast.unparse(node)})"
+        elif isinstance(node, ast.BinOp): op_type = type(node.op).__name__; label += f"\\n(op='{op_type}')"
         return label
 
     def visit(self, node: ast.AST) -> str:
@@ -218,6 +176,9 @@ class ASTVisualizer(ast.NodeVisitor):
             self.dot.edge(current_id, child_id)
         return current_id
 
+class CodeRequest(BaseModel):
+    code: str
+
 @app.post("/get-ast-visualization")
 async def get_ast_visualization(request: CodeRequest):
     try:
@@ -226,5 +187,7 @@ async def get_ast_visualization(request: CodeRequest):
         visualizer.visit(tree)
         svg_data = visualizer.dot.pipe(format='svg')
         return {"svg_data": svg_data.decode('utf-8')}
+    except SyntaxError as e:
+        return {"error": f"Invalid Python Code: {e}"}
     except Exception as e:
         return {"error": f"An unexpected error occurred: {e}"}
