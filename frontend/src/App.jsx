@@ -3,7 +3,6 @@ import CodeEditor from './components/CodeEditor';
 import Visualization from './components/Visualization';
 import Controls from './components/Controls';
 import AstDisplay from './components/AstDisplay';
-// This import ONLY works if the file is in src/utils/
 import { runJsCode } from './utils/jsTracer'; 
 import './styles/index.css';
 import ComplexityBar from './components/ComplexityBar';
@@ -93,6 +92,8 @@ function App() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // ADDED: State for complexity analysis
   const [complexity, setComplexity] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
@@ -109,6 +110,7 @@ function App() {
     setTrace([]);
     setCurrentStep(0);
     setError(null);
+    setComplexity(null); // Reset complexity on language change
   }, [language]);
 
   useEffect(() => {
@@ -134,10 +136,13 @@ function App() {
     loadPyodide();
   }, []);
 
+// ADDED: Real-time Complexity Analysis Effect with Debounce
 useEffect(() => {
     // Don't analyze empty code
     if (!code || code.trim() === '') return;
-
+    
+    // Clear old result and indicate loading
+    setComplexity(null);
     setIsAnalyzing(true);
 
     // Debounce: Wait 1.5 seconds after the user STOPS typing
@@ -152,14 +157,15 @@ useEffect(() => {
         setComplexity(data);
       } catch (error) {
         console.error("Analysis failed", error);
+        setComplexity({ time: '?', space: '?', derivation: `Analysis failed: ${error.message}` });
       } finally {
         setIsAnalyzing(false);
       }
     }, 1500); // 1.5s delay
 
-    // Cleanup function: cancels the timer if the user types again
+    // Cleanup function: cancels the timer if the code changes again
     return () => clearTimeout(timeoutId);
-  }, [code, language]); // Re-run whenever code or language changes
+}, [code, language]); 
 
   // Calculate pop-up position
   useEffect(() => {
@@ -301,6 +307,7 @@ trace_json = tracer.run_user_code(user_code)
           <div className="visualization-panel">
             <Visualization traceStep={trace[currentStep]} error={error} />
             <hr style={{ margin: '2rem 0', borderColor: '#374151' }} />
+            {/* AST is only available for Python currently */}
             {language === 'python' && <AstDisplay code={code} />}
           </div>
 
