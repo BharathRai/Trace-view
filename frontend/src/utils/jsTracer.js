@@ -26,6 +26,7 @@ export function runJsCode(code) {
         throw new Error("JS-Interpreter or Acorn not loaded. Check index.html");
     }
 
+    const variableMap = buildVariableMap(code);
     const myInterpreter = new window.Interpreter(code, initFunc);
 
     while (myInterpreter.step() && stepCount < MAX_STEPS) {
@@ -35,8 +36,7 @@ export function runJsCode(code) {
 
       const node = myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
       
-      // Capture state on meaningful nodes
-      if (node.start && node.end && (
+      if (node && node.start && node.end && (
           node.type === 'VariableDeclaration' || 
           node.type === 'ExpressionStatement' || 
           node.type === 'ReturnStatement' ||
@@ -48,7 +48,7 @@ export function runJsCode(code) {
           node.type === 'UpdateExpression' || 
           node.type === 'AssignmentExpression'
       )) { 
-        const snapshot = captureState(myInterpreter, node);
+        const snapshot = captureState(myInterpreter, node, variableMap);
         
         const lastSnap = trace[trace.length - 1];
         if (!lastSnap || lastSnap.line_number !== snapshot.line_number) {
@@ -70,73 +70,98 @@ export function runJsCode(code) {
   return trace;
 }
 
-function captureState(interpreter, node) {
+function buildVariableMap(code) {
+    const map = { '<global>': new Set() };
+    try {
+        const ast = window.acorn.parse(code, { ecmaVersion: 2020 });
+        const visit = (node, scopeName) => {
+            if (!node) return;
+            if (node.type === 'FunctionDeclaration' && node.id) {
+                const funcName = node.id.name;
+                map[funcName] = new Set();
+                if(node.params) node.params.forEach(p => map[funcName].add(p.name));
+                visit(node.body, funcName);
+                return;
+            } else if (node.type === 'VariableDeclaration') {
+                node.declarations.forEach(dec => {
+                    if (dec.id && dec.id.name) map[scopeName].add(dec.id.name);
+                });
+            }
+            for (const key in node) {
+                if (key === 'body' && node.type === 'FunctionDeclaration') continue;
+                if (node[key] && typeof node[key] === 'object') {
+                    if (Array.isArray(node[key])) node[key].forEach(child => visit(child, scopeName));
+                    else if (node[key].type) visit(node[key], scopeName);
+                }
+            }
+        };
+        visit(ast, '<global>');
+    } catch (e) { console.warn("Failed to parse AST:", e); }
+    return map;
+}
+
+function captureState(interpreter, node, variableMap) {
   const stack = [];
   const heap = {};
   let stateStack = interpreter.stateStack;
-
-  // Use a Map to hold our *visual* frames, keyed by the root function scope
-  // This merges all block scopes (if, for) into their parent function.
-  const frameMap = new Map();
+  const processedScopes = new Set();
 
   for (let i = 0; i < stateStack.length; i++) {
     const state = stateStack[i];
-    if (!state.scope) continue;
-
-    // 1. Find the "owner" function scope for this state
-    let func = state.func_;
-    let funcScope = state.scope;
     
-    // Walk up to find the *actual* function this block scope belongs to
-    let tempScope = state.scope;
-    while (tempScope) {
-        if (tempScope.func_) {
-            func = tempScope.func_;
-            funcScope = tempScope;
-            break;
-        }
-        if (tempScope === interpreter.globalScope) {
-            funcScope = tempScope; // Belongs to global
-            break;
-        }
-        tempScope = tempScope.parent;
-    }
+    if (state.scope && state.func_) {
+      if (processedScopes.has(state.scope)) continue;
+      processedScopes.add(state.scope);
 
-    // 2. Get the function name
-    let funcName = "Global Frame";
-    if (func) {
-        if (func.name) funcName = func.name;
-        // Check the AST node for the function name (e.g., function bubbleSort() {...})
-        else if (func.node && func.node.id) funcName = func.node.id.name;
-        else funcName = 'anonymous';
-    }
-    
-    // 3. Get or create the visual frame
-    if (!frameMap.has(funcScope)) {
-        frameMap.set(funcScope, {
-            func_name: funcName,
-            lineno: node.loc ? node.loc.start.line : 0,
-            locals: {}
-        });
-    }
+      let funcName = 'anonymous';
+      if (state.func_.name) funcName = state.func_.name;
+      else if (state.func_.node && state.func_.node.id && state.func_.node.id.name) funcName = state.func_.node.id.name;
+      
+      if (i === 0) funcName = 'Global Frame';
 
-    // 4. Populate variables from this specific state's scope
-    // This loop adds variables from the *immediate* scope (like 'j' in a 'for' loop)
-    // to the main function frame we identified.
-    const frame = frameMap.get(funcScope);
-    for (const key in state.scope.properties) {
-        if (['arguments','this','window','console','print'].includes(key)) continue;
-        
-        // Add if not already present from a deeper scope
-        if (frame.locals[key] === undefined) { 
-            const val = state.scope.properties[key];
-            frame.locals[key] = formatValue(val, heap, interpreter);
-        }
+      const locals = {};
+      
+      // 1. Targeted Extraction using AST Map
+      const targetVars = variableMap[funcName] || variableMap['<global>'];
+      if (targetVars) {
+          targetVars.forEach(varName => {
+              try {
+                  const val = interpreter.getValueFromScope(state.scope, varName);
+                  if (val !== interpreter.UNDEFINED) {
+                      locals[varName] = formatValue(val, heap, interpreter);
+                  }
+              } catch (err) {
+                  // Ignore errors during variable lookup to prevent crash
+              }
+          });
+      }
+
+      // 2. Fallback Extraction (Safe Traversal)
+      let currentScope = state.scope;
+      while (currentScope) {
+          if (currentScope.properties) {
+              for (const key in currentScope.properties) {
+                  if (['arguments','this','window','console','print'].includes(key)) continue;
+                  if (!locals[key]) {
+                      const val = currentScope.properties[key];
+                      // Ensure value is valid before formatting
+                      if (val !== undefined && val !== null) {
+                           locals[key] = formatValue(val, heap, interpreter);
+                      }
+                  }
+              }
+          }
+          if (currentScope === interpreter.globalScope && funcName !== 'Global Frame') break;
+          currentScope = currentScope.parent;
+      }
+
+      stack.push({
+        func_name: funcName,
+        lineno: node.loc ? node.loc.start.line : 0,
+        locals: locals
+      });
     }
   }
-  
-  // Convert map values to array
-  frameMap.forEach(frame => stack.push(frame));
 
   return {
     line_number: node.loc ? node.loc.start.line : 0,
@@ -149,33 +174,40 @@ function formatValue(pseudoVal, heap, interpreter) {
   if (pseudoVal === undefined || pseudoVal === interpreter.UNDEFINED) return { value: 'undefined' };
   if (pseudoVal === null) return { value: 'null' };
 
-  if (interpreter.isa(pseudoVal, interpreter.BOOLEAN)) return { value: String(pseudoVal.data) };
-  if (interpreter.isa(pseudoVal, interpreter.NUMBER)) return { value: String(pseudoVal.data) };
-  if (interpreter.isa(pseudoVal, interpreter.STRING)) return { value: `"${pseudoVal.data}"` };
+  try {
+      if (interpreter.isa(pseudoVal, interpreter.BOOLEAN)) return { value: String(pseudoVal.data) };
+      if (interpreter.isa(pseudoVal, interpreter.NUMBER)) return { value: String(pseudoVal.data) };
+      if (interpreter.isa(pseudoVal, interpreter.STRING)) return { value: `"${pseudoVal.data}"` };
 
-  if (interpreter.isa(pseudoVal, interpreter.OBJECT)) {
-    const id = pseudoVal.id || String(Math.random()); 
-    pseudoVal.id = id; 
+      if (interpreter.isa(pseudoVal, interpreter.OBJECT)) {
+        const id = pseudoVal.id || String(Math.random()); 
+        pseudoVal.id = id; 
 
-    let type = 'object';
-    let value = []; 
-    
-    if (interpreter.isa(pseudoVal, interpreter.ARRAY)) {
-      type = 'list'; 
-      const length = pseudoVal.properties.length;
-      for (let i = 0; i < length; i++) {
-        value.push(formatValue(pseudoVal.properties[i], heap, interpreter));
+        let type = 'object';
+        let value = []; 
+        
+        if (interpreter.isa(pseudoVal, interpreter.ARRAY)) {
+          type = 'list'; 
+          const length = pseudoVal.properties.length;
+          for (let i = 0; i < length; i++) {
+            value.push(formatValue(pseudoVal.properties[i], heap, interpreter));
+          }
+        } else {
+          type = 'dict'; 
+          value = {}; 
+          for (const key in pseudoVal.properties) {
+             // Only recurse if it's a direct property, not prototype chain
+             if(Object.prototype.hasOwnProperty.call(pseudoVal.properties, key)) {
+                  value[key] = formatValue(pseudoVal.properties[key], heap, interpreter);
+             }
+          }
+        }
+
+        heap[id] = { type, value };
+        return { ref: id };
       }
-    } else {
-      type = 'dict'; 
-      value = {}; 
-      for (const key in pseudoVal.properties) {
-          value[key] = formatValue(pseudoVal.properties[key], heap, interpreter);
-      }
-    }
-
-    heap[id] = { type, value };
-    return { ref: id };
+  } catch (err) {
+      return { value: '<error>' };
   }
 
   return { value: String(pseudoVal) };
