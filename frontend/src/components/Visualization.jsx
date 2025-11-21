@@ -7,13 +7,14 @@ import dagre from 'dagre';
 // --- Helper Components ---
 const FrameNode = ({ data }) => {
     const IGNORED_VARS = ['__builtins__', 'tracer', 'user_code', 'run_user_code', 'trace_json'];
-    
+
     return (
-        <div 
-            className="frame-node" 
-            style={{ 
-                border: data.isExecuting ? '2px solid #34d399' : '1px solid #777', 
-                boxShadow: data.isExecuting ? '0 0 10px #34d399' : 'none' 
+        <div
+            className="frame-node"
+            style={{
+                border: data.isExecuting ? '2px solid #34d399' : '1px solid #475569',
+                boxShadow: data.isExecuting ? '0 0 20px rgba(52, 211, 153, 0.4)' : 'none',
+                background: data.isExecuting ? 'rgba(52, 211, 153, 0.05)' : 'rgba(30, 41, 59, 0.95)'
             }}
         >
             <div className="frame-title">{data.title}</div>
@@ -28,7 +29,7 @@ const FrameNode = ({ data }) => {
                                     type="source"
                                     position={Position.Right}
                                     id={v.handleId}
-                                    style={{ background: '#00BFFF', width: 10, height: 10, right: -6 }}
+                                    style={{ background: '#38bdf8', width: 8, height: 8, right: -4 }}
                                 />
                             )}
                         </div>
@@ -41,13 +42,11 @@ const FrameNode = ({ data }) => {
 
 const HeapNode = ({ data }) => (
     <div className="heap-node">
-        {/* --- FIX #1: Add the target handle for arrows to connect to --- */}
         <Handle
             type="target"
             position={Position.Left}
             style={{ background: 'transparent', border: 'none' }}
         />
-        {/* --- End of Fix --- */}
 
         <div className="heap-title">{data.type}</div>
         <div className="heap-grid">
@@ -69,18 +68,18 @@ dagreGraph.setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 250;
 const nodeHeight = 150;
 const getLayoutedElements = (nodes, edges, direction = 'LR') => {
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 20, ranksep: 50 });
-  nodes.forEach((node) => { dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight }); });
-  edges.forEach((edge) => { dagreGraph.setEdge(edge.source, edge.target); });
-  dagre.layout(dagreGraph);
-  nodes.forEach((node) => {
-    const nodeWithPosition = dagreGraph.node(node.id);
-    node.position = {
-      x: nodeWithPosition.x - nodeWidth / 2,
-      y: nodeWithPosition.y - nodeHeight / 2,
-    };
-  });
-  return { nodes, edges };
+    dagreGraph.setGraph({ rankdir: direction, nodesep: 30, ranksep: 80 });
+    nodes.forEach((node) => { dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight }); });
+    edges.forEach((edge) => { dagreGraph.setEdge(edge.source, edge.target); });
+    dagre.layout(dagreGraph);
+    nodes.forEach((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id);
+        node.position = {
+            x: nodeWithPosition.x - nodeWidth / 2,
+            y: nodeWithPosition.y - nodeHeight / 2,
+        };
+    });
+    return { nodes, edges };
 };
 
 
@@ -94,15 +93,12 @@ const generateFlowElements = (traceStep) => {
     Object.entries(heap).forEach(([id, obj], index) => {
         const isList = obj.type === 'list' || obj.type === 'tuple';
         let items = isList ? obj.value.map(v => ({ value: v.value ?? '→' })) : [];
-        
-        // --- FIX #2: Remove the manual 'position' property ---
-        nodes.push({ 
-            id: `heap-${id}`, 
-            type: 'heap', 
+
+        nodes.push({
+            id: `heap-${id}`,
+            type: 'heap',
             data: { type: obj.type, items: items }
-            // The 'position' property is now set by Dagre
         });
-        // --- End of Fix ---
     });
 
     stack.forEach((frame, frameIndex) => {
@@ -113,8 +109,7 @@ const generateFlowElements = (traceStep) => {
             hasRef: !!data.ref,
             handleId: `handle-${frameId}-${name}`
         }));
-        
-        // --- FIX #2: Remove the manual 'position' property ---
+
         nodes.push({
             id: frameId, type: 'frame',
             data: {
@@ -122,10 +117,8 @@ const generateFlowElements = (traceStep) => {
                 variables: variables,
                 isExecuting: frame.lineno === line_number && frame.func_name !== '<module>'
             }
-            // The 'position' property is now set by Dagre
         });
-        // --- End of Fix ---
-        
+
         Object.entries(frame.locals).forEach(([name, data]) => {
             if (data.ref) {
                 const handleId = `handle-${frameId}-${name}`;
@@ -133,8 +126,8 @@ const generateFlowElements = (traceStep) => {
                     id: `edge-${frameId}-${name}`, source: frameId, sourceHandle: handleId,
                     target: `heap-${data.ref}`, type: 'smoothstep',
                     animated: true,
-                    style: { stroke: '#00BFFF' },
-                    markerEnd: { type: MarkerType.ArrowClosed, color: '#00BFFF' }
+                    style: { stroke: '#38bdf8', strokeWidth: 2 },
+                    markerEnd: { type: MarkerType.ArrowClosed, color: '#38bdf8' }
                 });
             }
         });
@@ -173,41 +166,43 @@ function Visualization({ traceStep, error }) {
         return (
             <div className="viz-section">
                 <h2>Program Output</h2>
-                <div className="viz-box" style={{backgroundColor: '#111', color: '#eee', whiteSpace: 'pre-wrap'}}>
+                <div className="viz-box" style={{ backgroundColor: '#1e293b', color: '#e2e8f0', whiteSpace: 'pre-wrap', border: '1px solid #334155' }}>
                     {traceStep.data}
                 </div>
             </div>
         );
     }
-    
+
     return (
         <div style={{ height: '100%', width: '100%' }}>
-            <ReactFlow 
-                nodes={elements.nodes} 
-                edges={elements.edges} 
-                nodeTypes={nodeTypes} 
+            <ReactFlow
+                nodes={elements.nodes}
+                edges={elements.edges}
+                nodeTypes={nodeTypes}
                 fitView
                 nodesDraggable={false}
                 panOnDrag={true}
                 zoomOnScroll={true}
             >
-                <MiniMap 
-                    nodeColor="#34d399"
-                    maskColor="#111827"
-                    style={{ backgroundColor: '#1f2937' }}
+                <MiniMap
+                    nodeColor="#475569"
+                    maskColor="rgba(15, 23, 42, 0.6)"
+                    style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
                 />
-                <Controls 
-                    style={{ 
-                        background: '#1f2937', 
-                        border: '1px solid #374151', 
-                        button: { color: '#eee', border: 'none' } 
-                    }} 
+                <Controls
+                    style={{
+                        background: '#1e293b',
+                        border: '1px solid #334155',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        padding: '4px'
+                    }}
                 />
-                <Background 
-                    variant="lines"
-                    gap={20}
-                    size={1}
-                    color="#444"
+                <Background
+                    variant="dots"
+                    gap={24}
+                    size={2}
+                    color="#334155"
                 />
             </ReactFlow>
         </div>
