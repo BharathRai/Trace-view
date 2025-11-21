@@ -68,7 +68,7 @@ dagreGraph.setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 250;
 const nodeHeight = 150;
 const getLayoutedElements = (nodes, edges, direction = 'LR') => {
-    dagreGraph.setGraph({ rankdir: direction, nodesep: 30, ranksep: 80 });
+    dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 100 });
     nodes.forEach((node) => { dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight }); });
     edges.forEach((edge) => { dagreGraph.setEdge(edge.source, edge.target); });
     dagre.layout(dagreGraph);

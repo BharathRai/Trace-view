@@ -18,47 +18,46 @@ function Controls({ onRunAndTrace, onAnalyzeComplexity, trace, currentStep, setC
   };
 
   return (
-    <div className="controls-container" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div style={{ display: 'flex', width: '100%', gap: '10px' }}>
-        
-        {/* BUTTON 1: Run & Trace (Main Execution) */}
-        <button onClick={onRunAndTrace} className="run-button" style={{ flexGrow: 1 }}>
-            ▶ Run & Trace
-        </button>
-        
-        {/* BUTTON 2: Analyze Complexity (Manual AI Call) */}
-        <button 
-            onClick={onAnalyzeComplexity} 
-            className="step-button" 
-            style={{ flexGrow: 1, backgroundColor: '#0056b3' }}
-        >
-            📈 Analyze Complexity
-        </button>
-        
-      </div>
-      
-      {/* Playback Controls and Slider */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
-          <button onClick={handlePrev} disabled={currentStep === 0} className="step-button">
-            {'< Prev'}
-          </button>
-          <span className="step-info">
-            Step: {currentStep + 1} / {totalSteps}
-          </span>
-          <button onClick={handleNext} disabled={currentStep >= totalSteps - 1} className="step-button">
-            {'Next >'}
-          </button>
+    <div className="controls-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
 
-          {totalSteps > 1 && (
-            <input
-              type="range"
-              min="0"
-              max={totalSteps - 1}
-              value={currentStep}
-              onChange={handleSliderChange}
-              style={{ width: '100%', cursor: 'pointer', marginLeft: '10px' }}
-            />
-          )}
+      {/* BUTTON 1: Run & Trace (Main Execution) */}
+      <button onClick={onRunAndTrace} className="run-button">
+        ▶ Run
+      </button>
+
+      {/* BUTTON 2: Analyze Complexity (Manual AI Call) */}
+      <button
+        onClick={onAnalyzeComplexity}
+        className="step-button"
+        style={{ backgroundColor: '#0056b3' }}
+      >
+        📈 Analyze
+      </button>
+
+      {/* Playback Controls and Slider */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexGrow: 1, minWidth: '250px' }}>
+        <button onClick={handlePrev} disabled={currentStep === 0} className="step-button" title="Previous Step">
+          {'<'}
+        </button>
+
+        <span className="step-info" style={{ minWidth: 'fit-content' }}>
+          {currentStep + 1} / {totalSteps}
+        </span>
+
+        <button onClick={handleNext} disabled={currentStep >= totalSteps - 1} className="step-button" title="Next Step">
+          {'>'}
+        </button>
+
+        {totalSteps > 1 && (
+          <input
+            type="range"
+            min="0"
+            max={totalSteps - 1}
+            value={currentStep}
+            onChange={handleSliderChange}
+            style={{ flexGrow: 1, cursor: 'pointer' }}
+          />
+        )}
       </div>
     </div>
   );
