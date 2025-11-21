@@ -54,6 +54,15 @@ const HeapNode = ({ data }) => (
                 <div key={index} className="heap-item">
                     <div className="heap-item-index">{index}</div>
                     <div>{item.value}</div>
+                    {/* Render Pointers */}
+                    {data.pointers && data.pointers.map((p, i) => (
+                        p.value === index && (
+                            <div key={i} className="pointer-container" style={{ bottom: `-${(i + 1) * 24}px` }}>
+                                <div className="pointer-arrow">↑</div>
+                                <div className="pointer-label">{p.name}</div>
+                            </div>
+                        )
+                    ))}
                 </div>
             ))}
         </div>
@@ -65,10 +74,10 @@ const nodeTypes = { frame: FrameNode, heap: HeapNode };
 // --- Dagre Layout Function ---
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
-const nodeWidth = 250;
+const nodeWidth = 300;
 const nodeHeight = 150;
 const getLayoutedElements = (nodes, edges, direction = 'LR') => {
-    dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 100 });
+    dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 180 });
     nodes.forEach((node) => { dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight }); });
     edges.forEach((edge) => { dagreGraph.setEdge(edge.source, edge.target); });
     dagre.layout(dagreGraph);
@@ -90,6 +99,15 @@ const generateFlowElements = (traceStep) => {
     let edges = [];
     const { stack, heap, line_number } = traceStep;
 
+    // 1. Identify the currently executing frame to extract pointers
+    const currentFrame = stack.find(frame => frame.lineno === line_number && frame.func_name !== '<module>');
+    let pointers = [];
+    if (currentFrame) {
+        pointers = Object.entries(currentFrame.locals)
+            .filter(([name, data]) => Number.isInteger(data.value)) // Heuristic: Integers are indices
+            .map(([name, data]) => ({ name, value: data.value }));
+    }
+
     Object.entries(heap).forEach(([id, obj], index) => {
         const isList = obj.type === 'list' || obj.type === 'tuple';
         let items = isList ? obj.value.map(v => ({ value: v.value ?? '→' })) : [];
@@ -97,7 +115,7 @@ const generateFlowElements = (traceStep) => {
         nodes.push({
             id: `heap-${id}`,
             type: 'heap',
-            data: { type: obj.type, items: items }
+            data: { type: obj.type, items: items, pointers: isList ? pointers : [] }
         });
     });
 
@@ -174,7 +192,7 @@ function Visualization({ traceStep, error }) {
     }
 
     return (
-        <div style={{ height: '100%', width: '100%' }}>
+        <div style={{ flexGrow: 1, width: '100%', minHeight: 0 }}>
             <ReactFlow
                 nodes={elements.nodes}
                 edges={elements.edges}

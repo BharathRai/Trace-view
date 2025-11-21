@@ -11,7 +11,6 @@ function AstDisplay({ code }) {
     setAstSvg(null);
 
     try {
-      //const response = await fetch('http://127.0.0.1:8000/get-ast-visualization', {
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/get-ast-visualization`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,26 +33,32 @@ function AstDisplay({ code }) {
   };
 
   return (
-    <div className="viz-section">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-        <h2>Abstract Syntax Tree (AST)</h2>
-        <button onClick={fetchAst} disabled={isLoading} className="step-button">
+    <div className="viz-section" style={{ padding: '0.5rem 1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+        <h2 style={{ fontSize: '1rem', margin: 0 }}>Abstract Syntax Tree (AST)</h2>
+        <button onClick={fetchAst} disabled={isLoading} className="step-button" style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}>
           {isLoading ? 'Generating...' : 'Generate AST Graph'}
         </button>
       </div>
 
       {/* 3. Display the .message property from the error object */}
       {error && (
-        <div className="error-details" style={{color: '#fca5a5'}}>
-            {error.message}
+        <div className="error-details" style={{ color: '#fca5a5', padding: '0.5rem' }}>
+          {error.message}
         </div>
       )}
-      
+
       {astSvg && (
-        <div 
-          className="viz-box" 
-          style={{ backgroundColor: '#f0f0f0', overflow: 'auto', padding: '1rem' }}
-          dangerouslySetInnerHTML={{ __html: astSvg }} 
+        <div
+          className="viz-box"
+          style={{
+            backgroundColor: '#f0f0f0',
+            overflow: 'auto',
+            padding: '0.5rem',
+            maxHeight: '250px', // Reduced height
+            border: '1px solid #334155'
+          }}
+          dangerouslySetInnerHTML={{ __html: astSvg }}
         />
       )}
     </div>

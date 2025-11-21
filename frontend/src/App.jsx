@@ -3,7 +3,7 @@ import CodeEditor from './components/CodeEditor';
 import Visualization from './components/Visualization';
 import Controls from './components/Controls';
 import AstDisplay from './components/AstDisplay';
-import { runJsCode } from './utils/jsTracer'; 
+import { runJsCode } from './utils/jsTracer';
 import ComplexityBar from './components/ComplexityBar';
 import './styles/index.css';
 
@@ -85,18 +85,18 @@ function ContextualFrameNode({ frame, position }) {
 }
 
 function App() {
-  const [language, setLanguage] = useState('python'); 
+  const [language, setLanguage] = useState('python');
   const [code, setCode] = useState(initialPythonCode);
   const [pyodide, setPyodide] = useState(null);
   const [trace, setTrace] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // Complexity State
   const [complexity, setComplexity] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  
+
   const editorRef = useRef(null);
   const [nodePosition, setNodePosition] = useState({ top: 0, left: 0, opacity: 0 });
 
@@ -118,18 +118,18 @@ function App() {
     async function loadPyodide() {
       try {
         console.log("Loading Pyodide...");
-        if (!window.pyodide) { 
-            const pyodideInstance = await window.loadPyodide({
+        if (!window.pyodide) {
+          const pyodideInstance = await window.loadPyodide({
             indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/"
-            });
-            console.log("Pyodide loaded successfully.");
-            const tracerCode = await (await fetch('/tracer.py')).text();
-            pyodideInstance.FS.writeFile("tracer.py", tracerCode, { encoding: "utf8" });
-            setPyodide(pyodideInstance);
+          });
+          console.log("Pyodide loaded successfully.");
+          const tracerCode = await (await fetch('/tracer.py')).text();
+          pyodideInstance.FS.writeFile("tracer.py", tracerCode, { encoding: "utf8" });
+          setPyodide(pyodideInstance);
         }
       } catch (e) {
         console.error("Failed to load Pyodide:", e);
-        setError({ details: "Could not load Python environment."});
+        setError({ details: "Could not load Python environment." });
       } finally {
         setIsLoading(false);
       }
@@ -137,39 +137,16 @@ function App() {
     loadPyodide();
   }, []);
 
-  // Manual Complexity Trigger
-  const triggerComplexityAnalysis = async () => {
-    if (!code || code.trim() === '') return;
-    
-    setIsAnalyzing(true);
-    setComplexity(null); // Clear old results
-
-    try {
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/analyze-complexity`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code, language })
-        });
-        const data = await response.json();
-        setComplexity(data);
-    } catch (error) {
-        console.error("Analysis failed", error);
-        setComplexity({ time: '?', space: '?', derivation: `Analysis failed: ${error.message}` });
-    } finally {
-        setIsAnalyzing(false);
-    }
-  };
-
   // Calculate pop-up position
   useEffect(() => {
     if (editorRef.current && trace[currentStep]) {
       const currentTrace = trace[currentStep];
       const currentFrame = currentTrace.stack?.slice(-1)[0];
 
-      const isValidFrame = currentFrame && 
-                           currentFrame.func_name !== '<module>' && 
-                           currentFrame.func_name !== '<global>' &&
-                           currentFrame.func_name !== 'anonymous';
+      const isValidFrame = currentFrame &&
+        currentFrame.func_name !== '<module>' &&
+        currentFrame.func_name !== '<global>' &&
+        currentFrame.func_name !== 'anonymous';
 
       if (isValidFrame) {
         const currentLine = currentTrace.line_number;
@@ -184,6 +161,47 @@ function App() {
     }
   }, [currentStep, trace]);
 
+  // Manual Complexity Trigger
+  const triggerComplexityAnalysis = async () => {
+    if (!code || code.trim() === '') {
+      console.warn("Complexity Analysis skipped: Code is empty.");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setComplexity(null); // Clear old results
+
+    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+    console.log(`Starting complexity analysis... API URL: ${apiUrl}`);
+
+    try {
+      const response = await fetch(`${apiUrl}/analyze-complexity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, language })
+      });
+
+      console.log(`Analysis response status: ${response.status}`);
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log("Analysis data received:", data);
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      setComplexity(data);
+    } catch (error) {
+      console.error("Complexity Analysis failed:", error);
+      setComplexity({ time: '?', space: '?', derivation: `Analysis failed: ${error.message}. Please ensure the backend is running at ${apiUrl}.` });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const runCode = () => {
     setError(null);
     setTrace([]);
@@ -191,18 +209,18 @@ function App() {
 
     // --- JAVASCRIPT LOGIC ---
     if (language === 'javascript') {
-        try {
-            const traceData = runJsCode(code);
-            setTrace(traceData);
-        } catch (e) {
-            setError({ details: e.message, aiHint: "Check your JavaScript syntax." });
-        }
-        return;
+      try {
+        const traceData = runJsCode(code);
+        setTrace(traceData);
+      } catch (e) {
+        setError({ details: e.message, aiHint: "Check your JavaScript syntax." });
+      }
+      return;
     }
 
     // --- PYTHON LOGIC ---
     if (!pyodide) return;
-    
+
     const pythonScript = `
 import tracer
 user_code = """${code.replace(/"/g, '\\"')}"""
@@ -216,7 +234,7 @@ trace_json = tracer.run_user_code(user_code)
         setTrace(parsedTrace);
         const errorStep = parsedTrace.find(step => step.event === 'error');
         if (errorStep) {
-            handleError(errorStep);
+          handleError(errorStep);
         }
       } else {
         console.error("Parsing failed: The result is not an array.");
@@ -224,10 +242,10 @@ trace_json = tracer.run_user_code(user_code)
       }
     } catch (e) {
       console.error("An error occurred during Python execution:", e);
-      setError({ details: `Execution failed: ${e.message}`, aiHint: "A critical error prevented the code from running."});
+      setError({ details: `Execution failed: ${e.message}`, aiHint: "A critical error prevented the code from running." });
     }
   };
-  
+
   const handleError = async (errorStep) => {
     console.log("Error detected, getting AI explanation...", errorStep);
     try {
@@ -261,51 +279,51 @@ trace_json = tracer.run_user_code(user_code)
     <div className="app-container">
       <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Trace-View✨</h1>
-        
-        <select 
-            value={language} 
-            onChange={(e) => setLanguage(e.target.value)} 
-            className="lang-select"
-            style={{ background: '#374151', color: 'white', padding: '0.5rem', borderRadius: '6px', border: '1px solid #555' }}
+
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          className="lang-select"
+          style={{ background: '#374151', color: 'white', padding: '0.5rem', borderRadius: '6px', border: '1px solid #555' }}
         >
-            <option value="python">Python 🐍</option>
-            <option value="javascript">JavaScript 🟨</option>
+          <option value="python">Python 🐍</option>
+          <option value="javascript">JavaScript 🟨</option>
         </select>
       </header>
 
       {isLoading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading Python Environment... 🐹</div>}
-      
+
       {(!isLoading || language === 'javascript') && (
         <main className="main-content" style={{ position: 'relative' }}>
           <div className="editor-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-            
+
             {/* Pass both functions to Controls */}
-            <Controls 
-                onRunAndTrace={runCode} 
-                onAnalyzeComplexity={triggerComplexityAnalysis} 
-                trace={trace} 
-                currentStep={currentStep} 
-                setCurrentStep={setCurrentStep} 
+            <Controls
+              onRunAndTrace={runCode}
+              onAnalyzeComplexity={triggerComplexityAnalysis}
+              trace={trace}
+              currentStep={currentStep}
+              setCurrentStep={setCurrentStep}
             />
-            
+
             <div className="editor-wrapper" style={{ flexGrow: 1 }}>
-                <CodeEditor
-                  code={code}
-                  setCode={setCode}
-                  currentLine={trace[currentStep]?.line_number}
-                  onMount={handleEditorMount}
-                  language={language}
-                />
+              <CodeEditor
+                code={code}
+                setCode={setCode}
+                currentLine={trace[currentStep]?.line_number}
+                onMount={handleEditorMount}
+                language={language}
+              />
             </div>
-            
+
             {/* Pass Complexity State and Loading Status */}
             <ComplexityBar complexity={complexity} loading={isAnalyzing} />
 
           </div>
-          
+
           <div className="visualization-panel">
             <Visualization traceStep={trace[currentStep]} error={error} />
-            <hr style={{ margin: '2rem 0', borderColor: '#374151' }} />
+            <div style={{ borderTop: '1px solid #374151', margin: '0.5rem 0' }}></div>
             {language === 'python' && <AstDisplay code={code} />}
           </div>
 

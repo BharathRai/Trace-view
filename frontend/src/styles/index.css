@@ -29,16 +29,6 @@ body {
   z-index: 10;
 }
 
-.app-header h1 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  margin: 0;
-  background: linear-gradient(to right, #38bdf8, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: -0.025em;
-}
-
 .main-content {
   display: flex;
   flex-grow: 1;
@@ -58,23 +48,6 @@ body {
   flex-grow: 1;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  background-color: #1e293b;
-  /* Slate 800 */
-}
-
-.visualization-panel {
-  width: 50%;
-  padding: 0;
-  /* Remove padding to let ReactFlow take full space */
-  position: relative;
-  background-color: #0f172a;
-}
-
-/* Controls Styles */
-.controls-container {
-  display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
@@ -82,6 +55,20 @@ body {
   border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.1);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  flex-wrap: wrap;
+}
+
+.visualization-panel {
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.controls-container {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
   flex-wrap: wrap;
 }
 
@@ -352,6 +339,35 @@ body {
   padding: 0 4px;
 }
 
+/* Pointer Styles */
+.pointer-container {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.pointer-arrow {
+  color: #fde047;
+  /* Yellow 300 */
+  font-size: 0.8rem;
+  line-height: 1;
+  font-weight: bold;
+}
+
+.pointer-label {
+  background-color: #fde047;
+  color: #0f172a;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 /* New In-line Frame Node Styles */
 .inline-frame-node {
   position: absolute;
@@ -421,34 +437,49 @@ body {
 }
 
 /* --- Responsive Mobile Layout --- */
+
+/* This rule applies to any screen 768px wide or less (like phones) */
 @media (max-width: 768px) {
+
+  /* Make the main content stack vertically */
   .main-content {
     flex-direction: column;
   }
 
+  /* Make both panels take up the full width */
   .editor-panel,
   .visualization-panel {
     width: 100%;
-    border-right: none;
+    box-sizing: border-box;
+    /* Ensures padding doesn't break layout */
   }
 
+  /* Give the panels a 50/50 height split 
+      (you can adjust these percentages)
+    */
   .editor-panel {
     height: 50vh;
+    /* 50% of the viewport height */
   }
 
   .visualization-panel {
     height: 50vh;
-    border-top: 1px solid #334155;
+    /* 50% of the viewport height */
+    border-left: none;
+    /* Remove the side border */
+    border-top: 2px solid #374151;
+    /* Add a border on top */
   }
 
+  /* Optional: Stack the controls for a better fit */
   .controls-container {
     flex-direction: column;
     align-items: stretch;
+    /* Make buttons full-width */
   }
 
   .step-info {
     margin-left: 0;
     text-align: center;
-    margin-top: 0.5rem;
   }
 }

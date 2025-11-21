@@ -31,7 +31,7 @@ function Controls({ onRunAndTrace, onAnalyzeComplexity, trace, currentStep, setC
         className="step-button"
         style={{ backgroundColor: '#0056b3' }}
       >
-        📈 Analyze
+        Analyze
       </button>
 
       {/* Playback Controls and Slider */}
