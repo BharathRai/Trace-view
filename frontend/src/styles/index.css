@@ -42,10 +42,14 @@ body {
   flex-direction: column;
   gap: 1rem;
   border-right: 1px solid rgba(148, 163, 184, 0.1);
+  overflow-y: auto;
+  /* Enable scrolling */
 }
 
 .editor-wrapper {
   flex-grow: 1;
+  min-height: 300px;
+  /* Ensure editor has size even if flex shrinks */
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 12px;
   align-items: center;
@@ -62,7 +66,8 @@ body {
   width: 50%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  /* Enable scrolling */
 }
 
 .controls-container {
