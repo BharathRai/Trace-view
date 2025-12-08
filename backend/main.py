@@ -221,7 +221,7 @@ def generate_mock_cpp_trace():
 @app.post("/get-error-explanation")
 async def get_error_explanation(request: ErrorRequest):
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-flash-2.0')
         prompt = f"""
         You are an expert Python programming tutor. 
         Explain this error in simple terms:
