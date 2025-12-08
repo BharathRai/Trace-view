@@ -14,9 +14,9 @@ class CTracer:
         Returns a JSON-serializable list of trace steps.
         """
         self.trace_data = []
-        filename = f"temp_{uuid.uuid4().hex}"
+        filename = f"/tmp/temp_{uuid.uuid4().hex}"
         source_file = f"{filename}.cpp"
-        exe_file = f"{filename}.exe" if os.name == 'nt' else f"./{filename}.out"
+        exe_file = f"{filename}.exe" if os.name == 'nt' else f"{filename}.out"
 
         try:
             # 1. Write Code to File

@@ -280,7 +280,8 @@ function App() {
             setTrace(data);
           }
         } catch (e) {
-          setError({ details: e.message, aiHint: "Failed to connect to backend for C++ tracing." });
+          console.error("C++ Trace Error Full:", e);
+          setError({ details: e.message || "Network Error", aiHint: "Failed to connect to backend. Check console for details." });
         } finally {
           setIsExecuting(false);
         }
@@ -348,8 +349,8 @@ trace_json = tracer.run_user_code(user_code)
 
   return (
     <div className="app-container">
-      <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem', height: '50px' }}>
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', margin: 0 }}>
           Trace-View✨
           {isExecuting && <span style={{ fontSize: '0.8rem', color: '#67e8f9' }}>Running... ⏳</span>}
         </h1>

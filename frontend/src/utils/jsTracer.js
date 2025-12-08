@@ -158,8 +158,9 @@ function captureState(interpreter, node, variableMap) {
 
       // 1. Targeted Extraction using AST Map (Priority)
       // This is cleaner because JS-Interpreter's scopes are messy
+      // 1. Targeted Extraction using AST Map
       const targetVars = variableMap[funcName] || variableMap['<global>'];
-      if (targetVars) {
+      if (targetVars && targetVars.size > 0) {
         targetVars.forEach(varName => {
           try {
             if (interpreter.hasProperty(state.scope, varName)) {
@@ -170,6 +171,22 @@ function captureState(interpreter, node, variableMap) {
             }
           } catch (err) { /* ignore */ }
         });
+      } else {
+        // Fallback: If AST map failed, try to guess from scope properties (risky but better than empty)
+        // This is tricky in JS-Interpreter as properties structure varies
+        if (i === 0) { // Global frame fallback
+          try {
+            const globalProps = interpreter.globalObject.properties;
+            for (const key in globalProps) {
+              if (!['window', 'self', 'console', 'print', 'alert', 'NaN', 'Infinity', 'undefined'].includes(key)) {
+                const val = globalProps[key];
+                if (val !== interpreter.UNDEFINED) {
+                  locals[key] = formatValue(val, heap, interpreter);
+                }
+              }
+            }
+          } catch (e) { }
+        }
       }
 
       // 2. Fallback Extraction (for things missed by AST or dynamic)

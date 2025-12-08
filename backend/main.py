@@ -127,10 +127,17 @@ async def analyze_complexity(request: ComplexityRequest):
             }
             
     elif request.language.lower() == 'javascript':
+        # Basic heuristic for JavaScript
+        loops = request.code.count('for (') + request.code.count('while (') + request.code.count('.forEach(') + request.code.count('.map(')
+        time = "O(1)"
+        if loops == 1: time = "O(N)"
+        elif loops == 2: time = "O(N^2)"
+        elif loops > 2: time = f"O(N^{loops})"
+        
         return {
-            "time": "Unknown",
-            "space": "Unknown",
-            "derivation": "Local complexity analysis for JavaScript is coming soon."
+            "time": time,
+            "space": "O(1) (Estimated)",
+            "derivation": f"Detected {loops} loops/iterations. This is a basic heuristic."
         }
     
     elif request.language.lower() in ['cpp', 'c++']:
