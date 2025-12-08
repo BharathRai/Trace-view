@@ -221,7 +221,18 @@ def generate_mock_cpp_trace():
 @app.post("/get-error-explanation")
 async def get_error_explanation(request: ErrorRequest):
     try:
-        model = genai.GenerativeModel('gemini-flash-2.0')
+        # Dynamically find a supported model to avoid 404s
+        model_name = 'gemini-1.5-flash' # Default fallback
+        try:
+             for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    model_name = m.name
+                    break
+        except:
+             pass
+        
+        print(f"Using Gemini Model: {model_name}")
+        model = genai.GenerativeModel(model_name)
         prompt = f"""
         You are an expert Python programming tutor. 
         Explain this error in simple terms:
@@ -231,6 +242,7 @@ async def get_error_explanation(request: ErrorRequest):
         response = model.generate_content(prompt)
         return {"explanation": response.text}
     except Exception as e:
+        print(f"AI Generation Error: {e}")
         return {"explanation": f"AI Error: {str(e)}"}
 
 
