@@ -104,8 +104,8 @@ const generateFlowElements = (traceStep) => {
     let pointers = [];
     if (currentFrame) {
         pointers = Object.entries(currentFrame.locals)
-            .filter(([name, data]) => Number.isInteger(data.value)) // Heuristic: Integers are indices
-            .map(([name, data]) => ({ name, value: data.value }));
+            .filter(([name, data]) => !isNaN(Number(data.value))) // Fix: Cast to number for check
+            .map(([name, data]) => ({ name, value: Number(data.value) })); // Fix: value as number
     }
 
     Object.entries(heap).forEach(([id, obj], index) => {

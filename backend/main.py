@@ -130,10 +130,23 @@ async def analyze_complexity(request: ComplexityRequest):
         return {
             "time": "Unknown",
             "space": "Unknown",
-            "derivation": "Local complexity analysis is currently only supported for Python code."
+            "derivation": "Local complexity analysis for JavaScript is coming soon."
         }
     
-    
+    elif request.language.lower() in ['cpp', 'c++']:
+        # Basic heuristic for C++
+        loops = request.code.count('for (') + request.code.count('while (')
+        time = "O(1)"
+        if loops == 1: time = "O(N)"
+        elif loops == 2: time = "O(N^2)"
+        elif loops > 2: time = f"O(N^{loops})"
+        
+        return {
+            "time": time,
+            "space": "O(1) (Estimated)",
+            "derivation": f"Detected {loops} loops. This is a basic heuristic."
+        }
+
     return {"time": "?", "space": "?", "derivation": "Unsupported language."}
 
 class TraceRequest(BaseModel):

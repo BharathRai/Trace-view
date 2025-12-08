@@ -125,7 +125,8 @@ function App() {
   const [pyodide, setPyodide] = useState(null);
   const [trace, setTrace] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isEnvLoading, setIsEnvLoading] = useState(true); // Initial Pyodide load
+  const [isExecuting, setIsExecuting] = useState(false); // Code execution state
   const [error, setError] = useState(null);
 
   // Complexity State
@@ -168,7 +169,7 @@ function App() {
         console.error("Failed to load Pyodide:", e);
         setError({ details: "Could not load Python environment." });
       } finally {
-        setIsLoading(false);
+        setIsEnvLoading(false);
       }
     }
     loadPyodide();
@@ -259,7 +260,7 @@ function App() {
     if (language === 'cpp') {
       const runCpp = async () => {
         try {
-          setIsLoading(true);
+          setIsExecuting(true);
           const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:10000'; // Default to Render port
           const response = await fetch(`${apiUrl}/trace-c`, {
             method: 'POST',
@@ -281,7 +282,7 @@ function App() {
         } catch (e) {
           setError({ details: e.message, aiHint: "Failed to connect to backend for C++ tracing." });
         } finally {
-          setIsLoading(false);
+          setIsExecuting(false);
         }
       };
       runCpp();
@@ -348,7 +349,10 @@ trace_json = tracer.run_user_code(user_code)
   return (
     <div className="app-container">
       <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Trace-View✨</h1>
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          Trace-View✨
+          {isExecuting && <span style={{ fontSize: '0.8rem', color: '#67e8f9' }}>Running... ⏳</span>}
+        </h1>
 
         <select
           value={language}
@@ -362,9 +366,9 @@ trace_json = tracer.run_user_code(user_code)
         </select>
       </header>
 
-      {isLoading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading Environment... ⏳</div>}
+      {isEnvLoading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading Python Environment... 🐹</div>}
 
-      {(!isLoading || language === 'javascript' || language === 'cpp') && (
+      {!isEnvLoading && (
         <main className="main-content" style={{ position: 'relative' }}>
           <div className="editor-panel" style={{ display: 'flex', flexDirection: 'column' }}>
 
@@ -375,6 +379,7 @@ trace_json = tracer.run_user_code(user_code)
               trace={trace}
               currentStep={currentStep}
               setCurrentStep={setCurrentStep}
+              disabled={isExecuting}
             />
 
             <div className="editor-wrapper" style={{ flexGrow: 1 }}>
