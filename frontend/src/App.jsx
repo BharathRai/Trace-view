@@ -133,6 +133,17 @@ function App() {
   const [complexity, setComplexity] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // --- Theme State ---
+  const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
   const editorRef = useRef(null);
   const [nodePosition, setNodePosition] = useState({ top: 0, left: 0, opacity: 0 });
 
@@ -349,22 +360,32 @@ trace_json = tracer.run_user_code(user_code)
 
   return (
     <div className="app-container">
-      <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem', height: '50px' }}>
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', margin: 0 }}>
+      <header className="app-header">
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', margin: 0, color: 'var(--text-accent)' }}>
           Trace-View✨
-          {isExecuting && <span style={{ fontSize: '0.8rem', color: '#67e8f9' }}>Running... ⏳</span>}
+          {isExecuting && <span style={{ fontSize: '0.8rem', color: 'var(--success-color)' }}>Running... ⏳</span>}
         </h1>
 
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="lang-select"
-          style={{ background: '#374151', color: 'white', padding: '0.5rem', borderRadius: '6px', border: '1px solid #555' }}
-        >
-          <option value="python">Python 🐍</option>
-          <option value="javascript">JavaScript 🟨</option>
-          <option value="cpp">C++ 🔵 (Beta)</option>
-        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button
+            onClick={toggleTheme}
+            className="step-button"
+            style={{ padding: '0.4rem 0.8rem', fontSize: '1.2rem' }}
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="lang-select"
+          >
+            <option value="python">Python 🐍</option>
+            <option value="javascript">JavaScript 🟨</option>
+            <option value="cpp">C++ 🔵 (Beta)</option>
+          </select>
+        </div>
       </header>
 
       {isEnvLoading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading Python Environment... 🐹</div>}

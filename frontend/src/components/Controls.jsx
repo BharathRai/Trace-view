@@ -28,8 +28,7 @@ function Controls({ onRunAndTrace, onAnalyzeComplexity, trace, currentStep, setC
       {/* BUTTON 2: Analyze Complexity (Manual AI Call) */}
       <button
         onClick={onAnalyzeComplexity}
-        className="step-button"
-        style={{ backgroundColor: '#0056b3' }}
+        className="analyze-button"
       >
         Analyze
       </button>

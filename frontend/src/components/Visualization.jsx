@@ -10,12 +10,7 @@ const FrameNode = ({ data }) => {
 
     return (
         <div
-            className="frame-node"
-            style={{
-                border: data.isExecuting ? '2px solid #34d399' : '1px solid #475569',
-                boxShadow: data.isExecuting ? '0 0 20px rgba(52, 211, 153, 0.4)' : 'none',
-                background: data.isExecuting ? 'rgba(52, 211, 153, 0.05)' : 'rgba(30, 41, 59, 0.95)'
-            }}
+            className={`frame-node ${data.isExecuting ? 'executing' : ''}`}
         >
             <div className="frame-title">{data.title}</div>
             <div className="var-grid">

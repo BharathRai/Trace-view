@@ -1,13 +1,70 @@
+/* CSS Variables for Theming */
+:root {
+  /* Default Dark Mode */
+  --bg-primary: #0f172a;
+  /* Slate 950 */
+  --bg-secondary: #1e293b;
+  /* Slate 800 */
+  --bg-tertiary: #334155;
+  /* Slate 700 */
+
+  --text-primary: #e2e8f0;
+  /* Slate 200 */
+  --text-secondary: #94a3b8;
+  /* Slate 400 */
+  --text-accent: #38bdf8;
+  /* Sky 400 */
+
+  --border-color: rgba(148, 163, 184, 0.1);
+  --border-color-strong: #334155;
+
+  --accent-color: #38bdf8;
+  --success-color: #10b981;
+
+  --code-bg: #1e293b;
+  --frame-bg: rgba(30, 41, 59, 0.95);
+  --header-bg: rgba(15, 23, 42, 0.8);
+
+  --shadow-color: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='light'] {
+  --bg-primary: #f8fafc;
+  /* Slate 50 */
+  --bg-secondary: #ffffff;
+  /* White */
+  --bg-tertiary: #e2e8f0;
+  /* Slate 200 */
+
+  --text-primary: #1e293b;
+  /* Slate 800 */
+  --text-secondary: #64748b;
+  /* Slate 500 */
+  --text-accent: #0284c7;
+  /* Sky 600 */
+
+  --border-color: #cbd5e1;
+  /* Slate 300 */
+  --border-color-strong: #94a3b8;
+
+  --accent-color: #0284c7;
+  --success-color: #059669;
+
+  --code-bg: #ffffff;
+  --frame-bg: rgba(255, 255, 255, 0.95);
+  --header-bg: rgba(255, 255, 255, 0.8);
+
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
 /* General Body Styles */
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0f172a;
-  /* Slate 950 */
-  color: #e2e8f0;
-  /* Slate 200 */
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 /* App Layout */
@@ -15,13 +72,14 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: radial-gradient(circle at top right, #1e293b 0%, #0f172a 100%);
+  background: var(--bg-primary);
+  /* Removed radial gradient for simpler theme switching */
 }
 
 .app-header {
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  background-color: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--header-bg);
   backdrop-filter: blur(10px);
   display: flex;
   justify-content: space-between;
@@ -41,24 +99,20 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  border-right: 1px solid var(--border-color);
   overflow-y: auto;
-  /* Enable scrolling */
 }
 
 .editor-wrapper {
   flex-grow: 1;
   min-height: 300px;
-  /* Ensure editor has size even if flex shrinks */
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
-  background-color: #1e293b;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  background-color: var(--code-bg);
+  box-shadow: 0 1px 3px 0 var(--shadow-color);
   flex-wrap: wrap;
 }
 
@@ -67,7 +121,6 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  /* Enable scrolling */
 }
 
 .controls-container {
@@ -82,6 +135,7 @@ body {
   font-weight: 600;
   font-size: 0.875rem;
   color: white;
+  /* Keep buttons white text for contrast on colored buttons */
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -92,42 +146,57 @@ body {
 }
 
 .run-button {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(135deg, var(--success-color) 0%, #059669 100%);
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .run-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
 }
 
 .run-button:active {
   transform: translateY(0);
 }
 
+.analyze-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  /* Blue gradient */
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.analyze-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.analyze-button:active {
+  transform: translateY(0);
+}
+
 .step-button {
-  background-color: #334155;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary) !important;
 }
 
 .step-button:hover:not(:disabled) {
-  background-color: #475569;
-  border-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--bg-secondary);
+  border-color: var(--text-secondary);
 }
 
 .step-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  background-color: #1e293b;
+  background-color: var(--bg-primary);
 }
 
 .step-info {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.875rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   margin-left: auto;
   padding: 0.25rem 0.75rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 6px;
   white-space: nowrap;
 }
@@ -140,8 +209,7 @@ body {
 .viz-section h2 {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #38bdf8;
-  /* Sky 400 */
+  color: var(--text-accent);
   margin-bottom: 1rem;
   display: flex;
   align-items: center;
@@ -150,14 +218,14 @@ body {
 
 .viz-box {
   padding: 1rem;
-  background-color: #1e293b;
-  border: 1px solid #334155;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color-strong);
   border-radius: 8px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.9rem;
   line-height: 1.5;
-  color: #e2e8f0;
-  box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+  color: var(--text-primary);
+  box-shadow: inset 0 2px 4px 0 var(--shadow-color);
 }
 
 /* Error Styling */
@@ -167,7 +235,7 @@ body {
   background: linear-gradient(to bottom right, #450a0a, #280505);
   border: 1px solid #7f1d1d;
   border-radius: 12px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 15px -3px var(--shadow-color);
 }
 
 .error-title {
@@ -199,7 +267,7 @@ body {
 /* Code Editor Line Highlight */
 .line-highlight {
   background-color: rgba(56, 189, 248, 0.15);
-  border-left: 2px solid #38bdf8;
+  border-left: 2px solid var(--accent-color);
 }
 
 @keyframes flash {
@@ -221,29 +289,31 @@ body {
 }
 
 /* --- New Node Styling --- */
-
-/* The main container for a frame node */
 .frame-node {
-  background: rgba(30, 41, 59, 0.95);
-  /* Slate 800 */
-  border: 1px solid #475569;
+  background: var(--frame-bg);
+  border: 1px solid var(--border-color-strong);
   border-radius: 12px;
-  color: #f1f5f9;
+  color: var(--text-primary);
   overflow: hidden;
   font-family: 'JetBrains Mono', monospace;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 15px -3px var(--shadow-color), 0 4px 6px -2px var(--shadow-color);
   min-width: 200px;
   backdrop-filter: blur(4px);
 }
 
-/* The title bar of the frame */
+.frame-node.executing {
+  border: 2px solid var(--success-color);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.05);
+}
+
 .frame-title {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #475569;
-  background: linear-gradient(to right, #334155, #1e293b);
+  border-bottom: 1px solid var(--border-color-strong);
+  background: var(--bg-tertiary);
   font-weight: 700;
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   display: flex;
@@ -251,17 +321,15 @@ body {
   align-items: center;
 }
 
-/* The grid container for all the variables */
 .var-grid {
   display: grid;
   grid-template-columns: 40% 60%;
   width: 100%;
 }
 
-/* A single box in the grid */
 .var-box {
   padding: 0.6rem 1rem;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid var(--border-color-strong);
   font-size: 0.85rem;
   display: flex;
   align-items: center;
@@ -272,48 +340,42 @@ body {
   border-bottom: none;
 }
 
-/* Specific style for variable names */
 .var-name {
-  color: #a78bfa;
-  /* Violet 400 */
+  color: var(--text-accent);
   font-weight: 600;
-  background-color: rgba(30, 41, 59, 0.5);
-  border-right: 1px solid #334155;
+  background-color: rgba(0, 0, 0, 0.1);
+  /* Subtle dark for both modes */
+  border-right: 1px solid var(--border-color-strong);
 }
 
-/* Specific style for variable values */
 .var-value {
   background-color: transparent;
-  color: #34d399;
-  /* Emerald 400 */
+  color: var(--success-color);
   position: relative;
 }
 
 /* --- New Heap Node Styling --- */
 .heap-node {
-  background: rgba(15, 23, 42, 0.95);
-  /* Slate 900 */
-  border: 1px solid #334155;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color-strong);
   border-radius: 10px;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-family: 'JetBrains Mono', monospace;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 6px -1px var(--shadow-color);
   min-width: 150px;
 }
 
-/* Title for heap objects */
 .heap-title {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #334155;
-  background-color: #1e293b;
-  color: #64748b;
+  border-bottom: 1px solid var(--border-color-strong);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-/* Grid for list/tuple items */
 .heap-grid {
   display: flex;
   padding: 0.75rem;
@@ -322,10 +384,9 @@ body {
   justify-content: center;
 }
 
-/* A single item in the heap */
 .heap-item {
-  border: 1px solid #475569;
-  background-color: #1e293b;
+  border: 1px solid var(--border-color-strong);
+  background-color: var(--bg-secondary);
   padding: 0.5rem;
   min-width: 2rem;
   text-align: center;
@@ -339,12 +400,11 @@ body {
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.6rem;
-  color: #64748b;
-  background-color: #0f172a;
+  color: var(--text-secondary);
+  background-color: var(--bg-primary);
   padding: 0 4px;
 }
 
-/* Pointer Styles */
 .pointer-container {
   position: absolute;
   left: 50%;
@@ -357,7 +417,7 @@ body {
 
 .pointer-arrow {
   color: #fde047;
-  /* Yellow 300 */
+  /* Keep yellow for high visibility */
   font-size: 0.8rem;
   line-height: 1;
   font-weight: bold;
@@ -376,13 +436,13 @@ body {
 /* New In-line Frame Node Styles */
 .inline-frame-node {
   position: absolute;
-  background: rgba(30, 41, 59, 0.95);
-  border: 1px solid #64748b;
+  background: var(--frame-bg);
+  border: 1px solid var(--border-color-strong);
   border-radius: 8px;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-family: 'JetBrains Mono', monospace;
   width: 180px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 10px 15px -3px var(--shadow-color);
   transition: top 0.2s ease, opacity 0.2s ease;
   z-index: 100;
   backdrop-filter: blur(8px);
@@ -390,11 +450,11 @@ body {
 
 .inline-frame-title {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #475569;
-  background-color: #334155;
+  border-bottom: 1px solid var(--border-color-strong);
+  background-color: var(--bg-tertiary);
   font-weight: 700;
   font-size: 0.8rem;
-  color: #34d399;
+  color: var(--success-color);
 }
 
 .inline-var-grid {
@@ -405,25 +465,25 @@ body {
 .inline-var-box {
   padding: 0.4rem 0.6rem;
   font-size: 0.8rem;
-  border-bottom: 1px solid #334155;
+  border-bottom: 1px solid var(--border-color-strong);
 }
 
 .inline-var-name {
-  color: #a78bfa;
+  color: var(--text-accent);
   font-weight: 600;
-  border-right: 1px solid #334155;
+  border-right: 1px solid var(--border-color-strong);
   background-color: rgba(0, 0, 0, 0.1);
 }
 
 .inline-var-value {
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .lang-select {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   padding: 0.5rem 1rem;
-  border: 1px solid #475569;
+  border: 1px solid var(--border-color-strong);
   border-radius: 8px;
   margin-right: 10px;
   font-weight: 600;
@@ -432,13 +492,85 @@ body {
 }
 
 .lang-select:hover {
-  border-color: #64748b;
+  border-color: var(--text-secondary);
 }
 
 .lang-select:focus {
   outline: none;
-  border-color: #38bdf8;
+  border-color: var(--text-accent);
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+/* --- Complexity Bar Styles --- */
+.complexity-container {
+  width: 100%;
+  margin-top: 1rem;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color-strong);
+  overflow: hidden;
+}
+
+.complexity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.complexity-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 8px;
+}
+
+.complexity-value {
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.complexity-separator {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color-strong);
+}
+
+.complexity-toggle {
+  background: transparent;
+  border: 1px solid var(--accent-color);
+  border-radius: 6px;
+  color: var(--accent-color);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.complexity-toggle:hover {
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.complexity-details {
+  padding: 16px;
+  background-color: var(--bg-primary);
+  border-top: 1px solid var(--border-color-strong);
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.complexity-details h4 {
+  margin: 0 0 12px 0;
+  color: var(--text-primary);
+  font-size: 1rem;
 }
 
 /* --- Responsive Mobile Layout --- */
@@ -456,35 +588,45 @@ body {
   .visualization-panel {
     width: 100%;
     box-sizing: border-box;
-    /* Ensures padding doesn't break layout */
   }
 
-  /* Give the panels a 50/50 height split 
-      (you can adjust these percentages)
-    */
+  /* Adjust Height Split */
   .editor-panel {
-    height: 50vh;
-    /* 50% of the viewport height */
+    height: 55vh;
+    /* Increase editor height slightly */
+    padding: 0.5rem;
+    /* Reduce padding to save space */
   }
 
   .visualization-panel {
-    height: 50vh;
-    /* 50% of the viewport height */
+    height: 45vh;
+    /* Decrease viz height */
     border-left: none;
-    /* Remove the side border */
-    border-top: 2px solid #374151;
-    /* Add a border on top */
+    border-top: 2px solid var(--border-color-strong);
   }
 
-  /* Optional: Stack the controls for a better fit */
+  /* Controls: Stack vertically or overflow scroll */
   .controls-container {
-    flex-direction: column;
-    align-items: stretch;
-    /* Make buttons full-width */
+    padding-bottom: 0.5rem;
+    overflow-x: auto;
+    /* Allow scrolling for buttons if too many */
+    flex-wrap: nowrap;
+    /* Keep single line but scrollable */
+    width: 100%;
+  }
+
+  /* Ast Display Adjustment */
+  .viz-section {
+    padding: 1rem;
+  }
+
+  .frame-node {
+    min-width: 150px;
   }
 
   .step-info {
     margin-left: 0;
     text-align: center;
+    font-size: 0.75rem;
   }
 }

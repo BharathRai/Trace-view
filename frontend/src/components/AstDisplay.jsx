@@ -52,11 +52,11 @@ function AstDisplay({ code }) {
         <div
           className="viz-box"
           style={{
-            backgroundColor: '#f0f0f0',
+            backgroundColor: 'var(--ast-bg)',
             overflow: 'auto',
             padding: '0.5rem',
-            maxHeight: '250px', // Reduced height
-            border: '1px solid #334155'
+            maxHeight: '250px',
+            border: '1px solid var(--border-color-strong)'
           }}
           dangerouslySetInnerHTML={{ __html: astSvg }}
         />
