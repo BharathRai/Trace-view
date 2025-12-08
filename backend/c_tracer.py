@@ -13,10 +13,14 @@ class CTracer:
         Compiles and traces the provided C++ code.
         Returns a JSON-serializable list of trace steps.
         """
+        import tempfile
         self.trace_data = []
-        filename = f"/tmp/temp_{uuid.uuid4().hex}"
-        source_file = f"{filename}.cpp"
-        exe_file = f"{filename}.exe" if os.name == 'nt' else f"{filename}.out"
+        
+        # Cross-platform temp file handling
+        temp_dir = tempfile.gettempdir()
+        filename_base = f"trace_c_{uuid.uuid4().hex}"
+        source_file = os.path.join(temp_dir, f"{filename_base}.cpp")
+        exe_file = os.path.join(temp_dir, f"{filename_base}.exe") if os.name == 'nt' else os.path.join(temp_dir, f"{filename_base}.out")
 
         try:
             # 1. Write Code to File
