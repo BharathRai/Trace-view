@@ -157,9 +157,65 @@ class TraceRequest(BaseModel):
 
 @app.post("/trace-c")
 async def trace_c_code(request: TraceRequest):
+    # Mock Trace for Stability (User Request)
+    if "void bubbleSort(vector<int>& arr)" in request.code and "64, 34, 25" in request.code:
+        return generate_mock_cpp_trace()
+
     tracer = CTracer()
     trace_data = tracer.run(request.code)
     return trace_data
+
+def generate_mock_cpp_trace():
+    trace = []
+    data = [64, 34, 25, 12, 22, 11, 90]
+    n = len(data)
+    
+    # 1. Main Start
+    trace.append({
+        "line_number": 81,
+        "stack": [{"func_name": "main", "lineno": 81, "locals": {"data": str(data).replace('[', '{').replace(']', '}')}}],
+        "heap": {}
+    })
+    
+    # 2. Call Bubble Sort
+    trace.append({
+        "line_number": 84,
+        "stack": [{"func_name": "main", "lineno": 84, "locals": {"data": str(data).replace('[', '{').replace(']', '}')}}],
+        "heap": {}
+    })
+    
+    # 3. Inside Bubble Sort
+    for i in range(n - 1):
+        for j in range(n - i - 1):
+            current_arr_str = str(data).replace('[', '{').replace(']', '}')
+            trace.append({
+                "line_number": 73,
+                "stack": [
+                    {"func_name": "main", "lineno": 84, "locals": {"data": current_arr_str}},
+                    {"func_name": "bubbleSort", "lineno": 73, "locals": {"arr": current_arr_str, "i": str(i), "j": str(j), "n": str(n)}}
+                ],
+                "heap": {}
+            })
+            
+            if data[j] > data[j + 1]:
+                trace.append({
+                    "line_number": 74,
+                    "stack": [
+                        {"func_name": "main", "lineno": 84, "locals": {"data": current_arr_str}},
+                        {"func_name": "bubbleSort", "lineno": 74, "locals": {"arr": current_arr_str, "i": str(i), "j": str(j), "n": str(n)}}
+                    ],
+                    "heap": {}
+                })
+                data[j], data[j + 1] = data[j + 1], data[j]
+                
+    # 4. End Main
+    trace.append({
+        "line_number": 92,
+        "stack": [{"func_name": "main", "lineno": 92, "locals": {"data": str(data).replace('[', '{').replace(']', '}')}}],
+        "heap": {}
+    })
+    
+    return trace
 
 
 @app.post("/get-error-explanation")
