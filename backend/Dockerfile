@@ -4,9 +4,12 @@ FROM python:3.11-slim
 # Set the working directory inside the container
 WORKDIR /app
 
-# ❗ Install the Graphviz system dependency as the root user
-# This is the step that will now succeed
-RUN apt-get update && apt-get install -y --no-install-recommends graphviz
+# ❗ Install the Graphviz system dependency and C++ tools (gcc, g++, gdb)
+# This is required for C++ tracing and AST visualization
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    graphviz \
+    build-essential \
+    gdb
 
 # Copy your Python dependencies file
 COPY requirements.txt .

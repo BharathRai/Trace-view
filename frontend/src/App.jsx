@@ -55,8 +55,43 @@ const initialJsCode = `function bubbleSort(arr) {
   return arr;
 }
 
+
 var data = [64, 34, 25, 12, 22, 11, 90];
 print("Sorted: " + bubbleSort(data));`;
+
+const initialCppCode = `#include <iostream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+// Bubble sort in C++
+void bubbleSort(vector<int>& arr) {
+    int n = arr.size();
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                swap(arr[j], arr[j + 1]);
+            }
+        }
+    }
+}
+
+int main() {
+    vector<int> data = {64, 34, 25, 12, 22, 11, 90};
+    
+    // Bubble Sort
+    bubbleSort(data);
+
+    cout << "Sorted array: ";
+    for (int val : data) {
+        cout << val << " ";
+    }
+    cout << endl;
+
+    return 0;
+}
+`;
 
 // Helper component for the pop-up
 function ContextualFrameNode({ frame, position }) {
@@ -104,8 +139,10 @@ function App() {
   useEffect(() => {
     if (language === 'python') {
       setCode(initialPythonCode);
-    } else {
+    } else if (language === 'javascript') {
       setCode(initialJsCode);
+    } else {
+      setCode(initialCppCode);
     }
     setTrace([]);
     setCurrentStep(0);
@@ -172,7 +209,7 @@ function App() {
     setComplexity(null); // Clear old results
 
     const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-    console.log(`Starting complexity analysis... API URL: ${apiUrl}`);
+    console.log(`Starting complexity analysis...API URL: ${apiUrl} `);
 
     try {
       const response = await fetch(`${apiUrl}/analyze-complexity`, {
@@ -215,6 +252,39 @@ function App() {
       } catch (e) {
         setError({ details: e.message, aiHint: "Check your JavaScript syntax." });
       }
+      return;
+    }
+
+    // --- C++ LOGIC ---
+    if (language === 'cpp') {
+      const runCpp = async () => {
+        try {
+          setIsLoading(true);
+          const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:10000'; // Default to Render port
+          const response = await fetch(`${apiUrl}/trace-c`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+          });
+
+          if (!response.ok) throw new Error("Backend Error");
+
+          const data = await response.json();
+
+          // Check for error in trace
+          if (data.length > 0 && data[0].event === 'error') {
+            setError({ details: data[0].error_message, aiHint: "Compilation or Runtime Error" });
+            setTrace([]);
+          } else {
+            setTrace(data);
+          }
+        } catch (e) {
+          setError({ details: e.message, aiHint: "Failed to connect to backend for C++ tracing." });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      runCpp();
       return;
     }
 
@@ -288,12 +358,13 @@ trace_json = tracer.run_user_code(user_code)
         >
           <option value="python">Python 🐍</option>
           <option value="javascript">JavaScript 🟨</option>
+          <option value="cpp">C++ 🔵 (Beta)</option>
         </select>
       </header>
 
-      {isLoading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading Python Environment... 🐹</div>}
+      {isLoading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Loading Environment... ⏳</div>}
 
-      {(!isLoading || language === 'javascript') && (
+      {(!isLoading || language === 'javascript' || language === 'cpp') && (
         <main className="main-content" style={{ position: 'relative' }}>
           <div className="editor-panel" style={{ display: 'flex', flexDirection: 'column' }}>
 

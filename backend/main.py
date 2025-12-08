@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import ast
 import graphviz
 import json
+from c_tracer import CTracer
 
 load_dotenv()
 
@@ -132,7 +133,17 @@ async def analyze_complexity(request: ComplexityRequest):
             "derivation": "Local complexity analysis is currently only supported for Python code."
         }
     
+    
     return {"time": "?", "space": "?", "derivation": "Unsupported language."}
+
+class TraceRequest(BaseModel):
+    code: str
+
+@app.post("/trace-c")
+async def trace_c_code(request: TraceRequest):
+    tracer = CTracer()
+    trace_data = tracer.run(request.code)
+    return trace_data
 
 
 @app.post("/get-error-explanation")
