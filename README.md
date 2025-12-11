@@ -2,8 +2,7 @@
 
 This project is an AI-powered, interactive web application designed to help users understand Python code execution. Inspired by Python Tutor, it provides a step-by-step visualization of the call stack and memory, along with intelligent, AI-driven explanations for errors.
 
-![App Screenshot](path/to/your/screenshot.png) 
-*(You should replace this with a screenshot of your running application!)*
+demo link : https://trace-view.onrender.com/
 
 ---
 
